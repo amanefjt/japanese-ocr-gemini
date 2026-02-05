@@ -139,7 +139,7 @@
                         
                         const base64Data = sCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
                         
-                        const prompt = `あなたはプロの編集者です。この画像（縦書き二段組の${side.name}）を正確に書き起こしてください。物理的な行末の改行は繋げ、意味的な段落（一文字下げ等）の区切りだけ改行してください。本文のみ出力してください。`;
+                        const prompt = `あなたはプロの編集者です。この画像（縦書きで一段組、または二段組の${side.name}）を正確に書き起こしてください。物理的な行末の改行は繋げ、意味的な段落（一文字下げ等）の区切りだけ改行してください。本文のみ出力してください。`;
 
                         const result = await model.generateContent([
                             { inlineData: { data: base64Data, mimeType: "image/jpeg" } },
