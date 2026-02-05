@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>日本語見開き縦書きPDFのOCR</title>
+    <title>日本語見開き縦書きPDF OCR (Gemini API)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://codoc.jp/js/cms.js" data-css="rainbow-square" data-usercode="cFhPkVEVKg" charset="UTF-8" defer></script>
     
@@ -13,8 +13,10 @@
         .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; position: relative; }
         strong.label { display: block; margin-bottom: 12px; color: #0071e3; font-size: 1.1em; }
         
-        .important-note { font-size: 0.8em; color: #d70015; background: #fff2f2; padding: 10px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #ffcfcf; line-height: 1.5; }
-        .important-note a { color: #0071e3; text-decoration: underline; }
+        /* お知らせ枠：黒字・強調・学習への注意書き */
+        .important-note { font-size: 0.8em; color: #1d1d1f; background: #ffffff; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #d2d2d7; line-height: 1.6; }
+        .important-note a { color: #0071e3; text-decoration: underline; font-weight: bold; }
+        .privacy-highlight { color: #d70015; font-weight: bold; }
 
         .comparison-table { width: 100%; border-collapse: collapse; font-size: 0.8em; margin: 15px 0; background: #f9f9fb; }
         .comparison-table th, .comparison-table td { border: 1px solid #d2d2d7; padding: 8px; text-align: center; }
@@ -45,13 +47,15 @@
 </head>
 <body>
 
-    <h2>日本語見開き縦書きPDFのOCR</h2>
+    <h2>日本語見開き縦書きPDF OCR</h2>
 
     <div class="card">
-        <strong class="label">1. 設定（Gemini APIキーとモデル）</strong>
+        <strong class="label">1. 設定（APIキーとモデル）</strong>
         
         <div class="important-note">
-            🔑 <strong>Gemini APIキーについて:</strong> <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>で無料で取得できます。※無料枠内での利用であっても、Googleの仕様上、<strong>支払い手段の登録が必要</strong>です。登録したAPIはローカルに保存され、ツール制作者には見られません。
+            🔑 <strong>Gemini APIキーについて:</strong> <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>で無料で取得できます。※無料枠内での利用であっても、Googleの仕様上、<strong>支払い手段の登録が必要</strong>です。登録したAPIはローカルに保存され、ツール制作者には見られません。<br>
+            ⚠️ <span class="privacy-highlight">学習への利用について:</span> 無料枠で取得したAPIキーを使用する場合、入力したデータはGoogleのモデル改善のために学習に利用される可能性があります。機密性の高い資料を扱う際はご注意ください。
+        </div>
 
         <input type="password" id="apiKey" placeholder="Gemini APIキーを入力">
         
