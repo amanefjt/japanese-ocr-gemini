@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>日本語縦書きPDFをGeminiでOCRする</title>
+    <title>日本語見開き縦書きPDFをGeminiでOCRする</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 20px auto; padding: 20px; background-color: #f5f5f7; color: #1d1d1f; }
@@ -36,7 +36,7 @@
 </head>
 <body>
 
-    <h2>日本語縦書きをGeminiでOCRする</h2>
+    <h2>日本語見開き縦書きをGeminiでOCRする</h2>
 
     <div class="card">
         <strong class="label">1. 設定（APIキーとモデル）</strong>
@@ -73,13 +73,13 @@
                 <tr>
                     <td>2.5 Flash</td>
                     <td>高精度・複雑な紙面向き</td>
-                    <td><strong>約5,000ページ</strong></td>
+                    <td><strong>約500ページ</strong></td>
                     <td>1,000回</td>
                 </tr>
             </tbody>
         </table>
         <div class="description" style="font-size: 0.75em; margin-top: 5px;">
-            ※1ページを左右に分割して解析するため、1ページにつき2リクエストを消費します。<br>
+            ※見開き1ページを左右に分割して解析するため、1ページにつき2リクエストを消費します。<br>
             ※Gemini 2.5 Flashの方が1日の上限（RPD）が緩和されているため、より多くのページを処理可能です。
         </div>
 
