@@ -3,32 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>日本語縦書きPDFをGeminiでOCRする</title>
+    <title>日本語縦書きをGeminiでOCRする</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 20px auto; padding: 20px; background-color: #f5f5f7; color: #1d1d1f; }
         h2 { text-align: center; color: #333; margin-bottom: 30px; font-weight: 700; }
         .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
-        strong.label { display: block; margin-bottom: 15px; color: #0071e3; font-size: 1.1em; }
+        strong.label { display: block; margin-bottom: 12px; color: #0071e3; font-size: 1.1em; }
         
-        /* 説明文を細く、目立たせすぎないスタイルに変更 */
-        .description { font-size: 0.85em; line-height: 1.5; color: #6e6e73; margin-bottom: 10px; font-weight: 400; }
+        /* 説明文のスタイル：細く、目立たせすぎない */
+        .description { font-size: 0.85em; line-height: 1.5; color: #6e6e73; margin-bottom: 8px; font-weight: 400; }
         .description a { color: #0071e3; text-decoration: none; border-bottom: 1px solid rgba(0,113,227,0.3); }
         .description a:hover { border-bottom: 1px solid #0071e3; }
         
-        .safe-info { font-size: 0.8em; color: #86868b; margin-top: 5px; margin-bottom: 15px; display: flex; align-items: flex-start; gap: 4px; }
+        .safe-info { font-size: 0.8em; color: #86868b; margin-top: 4px; margin-bottom: 12px; display: flex; align-items: flex-start; gap: 4px; line-height: 1.4; }
 
-        input[type="password"], input[type="file"] { width: 100%; padding: 10px; border: 1px solid #d2d2d7; border-radius: 8px; box-sizing: border-box; margin-bottom: 8px; font-size: 14px; background: #fafafa; }
+        input[type="password"], input[type="file"] { width: 100%; padding: 12px; border: 1px solid #d2d2d7; border-radius: 8px; box-sizing: border-box; margin-bottom: 8px; font-size: 14px; background: #fafafa; }
         input[type="password"]:focus { outline: none; border-color: #0071e3; background: #fff; }
 
-        button { background-color: #0071e3; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; font-size: 15px; transition: all 0.2s; }
+        button { background-color: #0071e3; color: white; border: none; padding: 14px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; font-size: 16px; transition: all 0.2s; }
         button:hover { background-color: #0077ed; transform: translateY(-1px); }
         
+        /* 進行状況：白背景に黒文字 */
         #log { background: #ffffff; color: #333; padding: 15px; border: 1px solid #d2d2d7; border-radius: 8px; font-family: inherit; height: 120px; overflow-y: auto; font-size: 13px; line-height: 1.6; }
-        textarea { width: 100%; height: 500px; border: 1px solid #d2d2d7; border-radius: 8px; padding: 15px; font-size: 15px; line-height: 1.8; box-sizing: border-box; margin-top: 10px; resize: vertical; }
         
-        .log-error { color: #ff3b30; }
-        .log-success { color: #34c759; }
+        /* 書き起こし結果 */
+        textarea { width: 100%; height: 500px; border: 1px solid #d2d2d7; border-radius: 8px; padding: 15px; font-size: 15px; line-height: 1.8; box-sizing: border-box; margin-top: 10px; resize: vertical; background-color: #fff; }
+        
+        .log-error { color: #ff3b30; font-weight: bold; }
+        .log-success { color: #34c759; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -40,13 +43,13 @@
         
         <div class="description">
             🔑 <strong>APIキーの取得:</strong> 
-            <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>で取得できます。大量のPDFを処理しない限り無料です。
+            <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>で取得できます。通常の利用（1日数百ページ程度）であれば無料で処理可能です。
         </div>
 
         <input type="password" id="apiKey" placeholder="APIキーを入力">
         
         <div class="safe-info">
-            🛡️ <span><strong>安全性について:</strong> 入力したキーはあなたのブラウザ（LocalStorage）にのみ保存されます。作者を含む第三者に送信されることは一切ありませんので、安心してご利用ください。</span>
+            🛡️ <span><strong>安全性とデータの扱い:</strong> 入力したキーはブラウザにのみ保存され、作者には送信されません。無料枠では入力内容がモデル改善に利用される場合があります。</span>
         </div>
 
         <button id="saveKeyBtn">設定を保存する</button>
@@ -69,14 +72,17 @@
     </div>
 
     <script type="module">
+        // Gemini SDK の読み込み
         import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 
+        // PDF.js ワーカーの設定
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
         const logArea = document.getElementById('log');
         const resultArea = document.getElementById('result');
         const apiKeyInput = document.getElementById('apiKey');
 
+        // ログ出力用関数
         const addLog = (msg, type = '') => {
             const div = document.createElement('div');
             if (type === 'error') div.className = 'log-error';
@@ -86,13 +92,14 @@
             logArea.scrollTop = logArea.scrollHeight;
         };
 
+        // APIキーの読み込みと保存
         apiKeyInput.value = localStorage.getItem('gemini_api_key') || "";
-
         document.getElementById('saveKeyBtn').onclick = () => {
             localStorage.setItem('gemini_api_key', apiKeyInput.value);
             alert("設定をブラウザに保存しました。");
         };
 
+        // メイン処理
         document.getElementById('startBtn').onclick = async () => {
             const file = document.getElementById('pdfFile').files[0];
             const key = apiKeyInput.value;
@@ -117,6 +124,7 @@
                 for (let i = 1; i <= pdf.numPages; i++) {
                     addLog(`[${i}/${pdf.numPages}] ページを解析中...`);
                     const page = await pdf.getPage(i);
+                    // OCR精度向上のため高解像度でレンダリング
                     const viewport = page.getViewport({scale: 2.5});
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
@@ -124,6 +132,7 @@
                     canvas.width = viewport.width;
                     await page.render({canvasContext: ctx, viewport: viewport}).promise;
                     
+                    // 左右に分割（二段組対応）
                     const mid = canvas.width / 2;
                     const margin = canvas.width * 0.05;
                     const sides = [
@@ -140,6 +149,7 @@
                         
                         const base64Data = sCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
                         
+                        // ユーザー指定のプロンプト
                         const prompt = `あなたはプロの編集者です。この画像（縦書きで一段組、または二段組の${side.name}）を正確に書き起こしてください。物理的な行末の改行は繋げ、意味的な段落（一文字下げ等）の区切りだけ改行してください。本文のみ出力してください。`;
 
                         const result = await model.generateContent([
@@ -150,10 +160,12 @@
                         pageText += result.response.text() + "\n";
                     }
 
+                    // 結果を画面に追加
                     resultArea.value += pageText + "\n";
                     resultArea.scrollTop = resultArea.scrollHeight;
                     addLog(`[${i}/${pdf.numPages}] 完了`, 'success');
 
+                    // 1リクエストごとに2秒待機（レート制限対策）
                     await new Promise(r => setTimeout(r, 2000));
                 }
                 addLog("すべての処理が完了しました。", 'success');
