@@ -192,7 +192,14 @@
                         sCanvas.width = side.w; sCanvas.height = canvas.height;
                         sCanvas.getContext('2d').drawImage(canvas, side.x, 0, side.w, canvas.height, 0, 0, side.w, canvas.height);
                         const base64Data = sCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
-                        const prompt = "あなたはプロの校正者です。縦書き文書を正確にテキスト化してください。改行を整理して文章を繋げてください。";
+                        const prompt = "あなたはプロの校正者です。提示された画像（縦書き文書の{side}）をテキスト化してください。
+
+                【最優先ルール】
+                1. 文章を繋げる: 1行の終わりで発生している物理的な改行はすべて削除し、一つの意味の通る文章として繋げてください。
+                2. 段落の維持: 文頭が一文字下がっている箇所や、明らかに話題が変わる箇所のみ、改行（段落分け）を行ってください。
+                3. ゴミの排除: ページ端のノイズや、半分切れている隣の段の文字は完全に無視してください。
+                4. 本文のみ: 解説や挨拶は一切不要です。
+";
                         const result = await model.generateContent([{ inlineData: { data: base64Data, mimeType: "image/jpeg" } }, prompt]);
                         pageText += result.response.text() + "\n";
                         await new Promise(r => setTimeout(r, 800));
