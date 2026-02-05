@@ -18,7 +18,7 @@
         .comparison-table th, .comparison-table td { border: 1px solid #d2d2d7; padding: 8px; text-align: center; }
         .comparison-table th { background: #f0f0f4; font-weight: 600; }
 
-        .warning-box { background: #fff9e6; border: 1px solid #ffe58f; padding: 12px; border-radius: 8px; font-size: 0.8em; color: #856404; margin-bottom: 15px; line-height: 1.6; }
+        .warning-box { background: #fff9e6; border: 1px solid #ffe58f; padding: 12px; border-radius: 8px; font-size: 0.8em; color: #856404; margin: 15px 0; line-height: 1.6; }
         .safe-info { font-size: 0.8em; color: #86868b; margin-top: 4px; margin-bottom: 12px; display: flex; align-items: flex-start; gap: 4px; line-height: 1.4; }
 
         input, select { width: 100%; padding: 12px; border: 1px solid #d2d2d7; border-radius: 8px; box-sizing: border-box; margin-bottom: 8px; font-size: 14px; background: #fafafa; }
@@ -79,10 +79,6 @@
             </tbody>
         </table>
 
-        <div class="warning-box">
-            ⚠️ <strong>長文PDFのコツ:</strong> ブラウザのメモリ制限を避けるため、<strong>一度に100ページ程度ずつ</strong>に範囲を絞って処理することをお勧めします。
-        </div>
-
         <div class="safe-info">
             🛡️ <span><strong>安全性:</strong> キーはブラウザにのみ保存され、作者には送信されません。無料枠では入力内容が学習に利用される場合があります。</span>
         </div>
@@ -93,6 +89,10 @@
     <div class="card">
         <strong class="label">2. 実行設定</strong>
         <input type="file" id="pdfFile" accept="application/pdf">
+
+        <div class="warning-box">
+            ⚠️ <strong>長文PDFのコツ:</strong> ブラウザのメモリ制限を避けるため、<strong>一度に100ページ程度ずつ</strong>に範囲を絞って処理することをお勧めします。
+        </div>
         
         <div style="margin: 15px 0 5px 0; font-size: 0.9em; font-weight: bold; color: #333;">処理するページ範囲:</div>
         <div class="range-container">
@@ -166,7 +166,6 @@
                 const startRange = parseInt(startPageInput.value) || 1;
                 const endRange = parseInt(endPageInput.value) || totalPages;
 
-                // 入力バリデーション
                 const actualStart = Math.max(1, startRange);
                 const actualEnd = Math.min(totalPages, endRange);
 
@@ -219,7 +218,6 @@
 
                         pageText += result.response.text() + "\n";
                         
-                        // レート制限対策
                         await new Promise(r => setTimeout(r, 600));
                     }
 
