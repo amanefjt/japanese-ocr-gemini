@@ -54,11 +54,12 @@
             <option value="gemini-2.5-flash">Gemini 2.5 Flash (精度優先)</option>
         </select>
 
-        <table class="comparison-table">
+       <table class="comparison-table">
             <thead>
                 <tr>
                     <th>モデル</th>
                     <th>特徴</th>
+                    <th>1日の処理目安</th>
                     <th>分間制限(RPM)</th>
                 </tr>
             </thead>
@@ -66,15 +67,21 @@
                 <tr>
                     <td>2 Flash</td>
                     <td>爆速・大量処理向き</td>
+                    <td><strong>約750ページ</strong></td>
                     <td>2,000回</td>
                 </tr>
                 <tr>
                     <td>2.5 Flash</td>
                     <td>高精度・複雑な紙面向き</td>
+                    <td><strong>約5,000ページ</strong></td>
                     <td>1,000回</td>
                 </tr>
             </tbody>
         </table>
+        <div class="description" style="font-size: 0.75em; margin-top: 5px;">
+            ※1ページを左右に分割して解析するため、1ページにつき2リクエストを消費します。<br>
+            ※Gemini 2.5 Flashの方が1日の上限（RPD）が緩和されているため、より多くのページを処理可能です。
+        </div>
 
         <div class="safe-info">
             🛡️ <span><strong>安全性とデータ:</strong> キーはブラウザにのみ保存されます。無料枠では入力内容がモデル改善に利用される場合があります。</span>
