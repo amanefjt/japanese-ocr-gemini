@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Gemini OCR Web App</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 20px auto; padding: 20px; line-height: 1.6; }
+        .config, .upload { border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 8px; }
+        textarea { width: 100%; height: 300px; margin-top: 10px; }
+        #status { color: blue; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h2>Gemini 2.5 OCR Web App</h2>
+
+    <div class="config">
+        <label>Gemini API Key: </label>
+        <input type="password" id="apiKey" placeholder="AI Studioで取得したキーを入力">
+        <button onclick="saveKey()">保存</button>
+        <p style="font-size: 0.8em; color: gray;">※キーはブラウザにのみ保存されます</p>
+    </div>
+
+    <div class="upload">
+        <input type="file" id="pdfFile" accept="application/pdf">
+        <button onclick="startOCR()">OCR開始</button>
+    </div>
+
+    <div id="status"></div>
+    <textarea id="result" placeholder="結果がここに表示されます..."></textarea>
+
+    <script type="module">
+        // Google Gen AI SDK のブラウザ版を読み込み
+        import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
+
+        window.saveKey = () => {
+            const key = document.getElementById('apiKey').value;
+            localStorage.setItem('gemini_api_key', key);
+            alert('保存しました');
+        };
+
+        window.startOCR = async () => {
+            const fileInput = document.getElementById('pdfFile');
+            const apiKey = localStorage.getItem('gemini_api_key') || document.getElementById('apiKey').value;
+            const status = document.getElementById('status');
+            const resultArea = document.getElementById('result');
+
+            if (!fileInput.files[0] || !apiKey) return alert('PDFとAPIキーが必要です');
+
+            status.innerText = "PDFを解析中...";
+            const genAI = new GoogleGenerativeAI(apiKey);
+            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+            const file = fileInput.files[0];
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+
+            resultArea.value = "";
+
+            for (let i = 1; i <= pdf.numPages; i++) {
+                status.innerText = `ページ ${i} / ${pdf.numPages} を処理中...`;
+                
+                // ブラウザ上でPDFを画像（Canvas）に変換
+                const page = await pdf.getPage(i);
+                const viewport = page.getViewport({scale: 2.0});
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                await page.render({canvasContext: context, viewport: viewport}).promise;
+
+                // CanvasをBase64画像に変換してGeminiに送る
+                const base64Image = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+                
+                const prompt = "縦書きで一段組、または二段組の日本語文書です。物理的な改行を繋ぎ、意味的な段落を維持してテキスト化してください。";
+                
+                try {
+                    const result = await model.generateContent([
+                        prompt,
+                        { inlineData: { data: base64Image, mimeType: "image/jpeg" } }
+                    ]);
+                    const text = result.response.text();
+                    resultArea.value += `--- Page ${i} ---＼n${text}＼n＼n`;
+                } catch (e) {
+                    resultArea.value += `--- Page ${i} Error ---＼n${e.message}＼n＼n`;
+                }
+                
+                // レート制限対策（1.5秒待機）
+                await new Promise(r => setTimeout(r, 1500));
+            }
+            status.innerText = "すべての処理が完了しました。";
+        };
+    </script>
+</body>
+</html>
