@@ -16,6 +16,11 @@
         .description { font-size: 0.85em; line-height: 1.5; color: #6e6e73; margin-bottom: 8px; font-weight: 400; }
         .description a { color: #0071e3; text-decoration: none; border-bottom: 1px solid rgba(0,113,227,0.3); }
         
+        /* 比較表のスタイル */
+        .comparison-table { width: 100%; border-collapse: collapse; font-size: 0.8em; margin: 15px 0; background: #f9f9fb; }
+        .comparison-table th, .comparison-table td { border: 1px solid #d2d2d7; padding: 8px; text-align: center; }
+        .comparison-table th { background: #f0f0f4; font-weight: 600; }
+
         input, select { width: 100%; padding: 12px; border: 1px solid #d2d2d7; border-radius: 8px; box-sizing: border-box; margin-bottom: 8px; font-size: 14px; background: #fafafa; }
         
         .range-container { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
@@ -30,12 +35,10 @@
         #log { background: #ffffff; color: #333; padding: 15px; border: 1px solid #d2d2d7; border-radius: 8px; font-family: inherit; height: 120px; overflow-y: auto; font-size: 13px; line-height: 1.6; }
         textarea { width: 100%; height: 500px; border: 1px solid #d2d2d7; border-radius: 8px; padding: 15px; font-size: 15px; line-height: 1.8; box-sizing: border-box; margin-top: 10px; resize: vertical; background-color: #fff; }
         
-        /* 応援エリアのスタイル */
         .support-card { text-align: center; border: 1px solid #e5e5e7; background-color: #fbfbfd; }
-
+        .warning-box { background: #fff9e6; border: 1px solid #ffe58f; padding: 12px; border-radius: 8px; font-size: 0.8em; color: #856404; margin: 15px 0; line-height: 1.6; }
         .log-error { color: #ff3b30; font-weight: bold; }
         .log-success { color: #34c759; font-weight: bold; }
-        .warning-box { background: #fff9e6; border: 1px solid #ffe58f; padding: 12px; border-radius: 8px; font-size: 0.8em; color: #856404; margin: 15px 0; line-height: 1.6; }
     </style>
 </head>
 <body>
@@ -43,11 +46,34 @@
     <h2>日本語見開き縦書きPDF OCR (Gemini API)</h2>
 
     <div class="card">
-        <strong class="label">1. 設定</strong>
+        <strong class="label">1. 設定（APIキーとモデル）</strong>
         <input type="password" id="apiKey" placeholder="Gemini APIキーを入力">
+        
+        <table class="comparison-table">
+            <thead>
+                <tr>
+                    <th>モデル</th>
+                    <th>1日の上限目安</th>
+                    <th>特徴</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>2.5 Flash</strong></td>
+                    <td>約5,000回</td>
+                    <td><strong>高精度</strong>・複雑な紙面向き</td>
+                </tr>
+                <tr>
+                    <td><strong>2.0 Flash</strong></td>
+                    <td>約1,500回</td>
+                    <td><strong>爆速</strong>・大量処理向き</td>
+                </tr>
+            </tbody>
+        </table>
+
         <select id="modelSelect">
             <option value="gemini-2.5-flash">Gemini 2.5 Flash (推奨)</option>
-            <option value="gemini-2.0-flash">Gemini 2 Flash</option>
+            <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
         </select>
         <button id="saveKeyBtn">設定を保存する</button>
     </div>
@@ -72,18 +98,22 @@
         <div id="log">PDFを選択して開始してください。</div>
     </div>
 
-    <div class="card">
-        <strong class="label">4. 書き起こし結果</strong>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-            <button id="copyBtn" class="copy-btn">📋 全てコピーする</button>
-            <span id="copyMsg" class="copy-success">コピー完了！</span>
+    <div class="card support-card" style="padding: 15px; margin-top: 30px;">
+        <p class="description" style="font-size: 0.8em; margin-bottom: 10px; line-height: 1.4;">
+            このツールがお役に立ちましたら、応援をいただけると励みになります！<br>
+            <strong>さらに人文社会科学系のためのツールを作っていきます！</strong>
+        </p>
+        
+        <div id="codoc-entry-3JKCLfl2SA" 
+             class="codoc-entries" 
+             data-without-body="1" 
+             data-support-message="応援する" 
+             style="transform: scale(0.9); transform-origin: center;">
         </div>
-        <textarea id="result" placeholder="ここに結果が表示されます..."></textarea>
     </div>
 
     <div class="card support-card">
-        <p class="description">このツールがお役に立ちましたら、応援をいただけるとさらに励みになります！さらに人文社会科学のためのツールを作っていきます！</p>
-        
+        <p class="description">このツールがお役に立ちましたら、応援をいただけると励みになります！</p>
         <div id="codoc-entry-3JKCLfl2SA" class="codoc-entries" data-without-body="1" data-support-message="開発を応援する"></div>
     </div>
 
@@ -101,7 +131,6 @@
         const copyBtn = document.getElementById('copyBtn');
         const copyMsg = document.getElementById('copyMsg');
 
-        // コピー機能
         copyBtn.onclick = async () => {
             if (!resultArea.value) return;
             await navigator.clipboard.writeText(resultArea.value);
@@ -172,11 +201,11 @@
                         sCanvas.getContext('2d').drawImage(canvas, side.x, 0, side.w, canvas.height, 0, 0, side.w, canvas.height);
                         const base64Data = sCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
                         
-                        const prompt = `あなたはプロの校正者です。この画像（縦書きの${side.name}）をテキスト化してください。改行を整理し、文章を繋げ、ノイズは無視してください。本文のみ出力してください。`;
+                        const prompt = `あなたはプロの校正者です。提示された画像（縦書きの${side.name}）をテキスト化してください。1行ごとの改行を削除し、文章を繋げ、ノイズは無視してください。本文のみ出力してください。`;
 
                         const result = await model.generateContent([{ inlineData: { data: base64Data, mimeType: "image/jpeg" } }, prompt]);
                         pageText += result.response.text() + "\n";
-                        await new Promise(r => setTimeout(r, 800)); // レート制限回避
+                        await new Promise(r => setTimeout(r, 800));
                     }
 
                     resultArea.value += pageText + "\n";
