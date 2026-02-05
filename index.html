@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>日本語見開き縦書きPDF OCR (Gemini API)</title>
+    <title>日本語見開き縦書きPDFのOCR</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://codoc.jp/js/cms.js" data-css="rainbow-square" data-usercode="cFhPkVEVKg" charset="UTF-8" defer></script>
     
@@ -13,8 +13,8 @@
         .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; position: relative; }
         strong.label { display: block; margin-bottom: 12px; color: #0071e3; font-size: 1.1em; }
         
-        /* お知らせ枠：黒字・強調・学習への注意書き */
-        .important-note { font-size: 0.8em; color: #1d1d1f; background: #ffffff; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #d2d2d7; line-height: 1.6; }
+        /* 注意書き：API入力の後に配置 */
+        .important-note { font-size: 0.8em; color: #1d1d1f; background: #ffffff; padding: 15px; border-radius: 8px; margin: 15px 0; border: 1px solid #d2d2d7; line-height: 1.6; }
         .important-note a { color: #0071e3; text-decoration: underline; font-weight: bold; }
         .privacy-highlight { color: #d70015; font-weight: bold; }
 
@@ -40,24 +40,25 @@
         .codoc-wrapper { transform: scale(0.8); transform-origin: center; filter: grayscale(100%); opacity: 0.6; transition: 0.3s; }
         .codoc-wrapper:hover { filter: grayscale(0%); opacity: 1; }
 
-        .warning-box { background: #fff9e6; border: 1px solid #ffe58f; padding: 12px; border-radius: 8px; font-size: 0.8em; color: #856404; margin: 15px 0; }
+        /* メモリ制限の警告：さらに小さく控えめに */
+        .warning-box { background: #fffdf5; border: 1px solid #f0e6cc; padding: 8px 12px; border-radius: 6px; font-size: 0.75em; color: #665c3d; margin: 10px 0; }
         .log-error { color: #ff3b30; font-weight: bold; }
         .log-success { color: #34c759; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h2>日本語見開き縦書きPDF OCR</h2>
+    <h2>日本語見開き縦書きPDFのOCR</h2>
 
     <div class="card">
         <strong class="label">1. 設定（APIキーとモデル）</strong>
         
+        <input type="password" id="apiKey" placeholder="Gemini APIキーを入力">
+
         <div class="important-note">
             🔑 <strong>Gemini APIキーについて:</strong> <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>で無料で取得できます。※無料枠内での利用であっても、Googleの仕様上、<strong>支払い手段の登録が必要</strong>です。登録したAPIはローカルに保存され、ツール制作者には見られません。<br>
             ⚠️ <span class="privacy-highlight">学習への利用について:</span> 無料枠で取得したAPIキーを使用する場合、入力したデータはGoogleのモデル改善のために学習に利用される可能性があります。機密性の高い資料を扱う際はご注意ください。
         </div>
-
-        <input type="password" id="apiKey" placeholder="Gemini APIキーを入力">
         
         <table class="comparison-table">
             <thead>
@@ -83,9 +84,11 @@
     <div class="card">
         <strong class="label">2. 実行設定</strong>
         <input type="file" id="pdfFile" accept="application/pdf">
+        
         <div class="warning-box">
             ⚠️ メモリ制限を避けるため、一度に100ページ程度ずつの処理をお勧めします。
         </div>
+
         <div class="range-container">
             <input type="number" id="startPage" value="1" min="1">
             <span>ページから</span>
@@ -132,6 +135,18 @@
         const copyBtn = document.getElementById('copyBtn');
         const copyMsg = document.getElementById('copyMsg');
 
+        // 設定の読み込み
+        apiKeyInput.value = localStorage.getItem('gemini_api_key') || "";
+        modelSelect.value = localStorage.getItem('gemini_model_choice') || "gemini-2.5-flash";
+
+        // 設定の保存
+        document.getElementById('saveKeyBtn').onclick = () => {
+            localStorage.setItem('gemini_api_key', apiKeyInput.value);
+            localStorage.setItem('gemini_model_choice', modelSelect.value);
+            alert("設定を保存しました。");
+        };
+
+        // コピー機能
         copyBtn.onclick = async () => {
             if (!resultArea.value) return;
             await navigator.clipboard.writeText(resultArea.value);
@@ -148,15 +163,6 @@
             logArea.scrollTop = logArea.scrollHeight;
         };
 
-        apiKeyInput.value = localStorage.getItem('gemini_api_key') || "";
-        modelSelect.value = localStorage.getItem('gemini_model_choice') || "gemini-2.5-flash";
-
-        document.getElementById('saveKeyBtn').onclick = () => {
-            localStorage.setItem('gemini_api_key', apiKeyInput.value);
-            localStorage.setItem('gemini_model_choice', modelSelect.value);
-            alert("設定を保存しました。");
-        };
-
         document.getElementById('startBtn').onclick = async () => {
             const file = document.getElementById('pdfFile').files[0];
             const key = apiKeyInput.value;
@@ -171,9 +177,9 @@
                 const model = genAI.getGenerativeModel({ model: selectedModel });
                 const arrayBuffer = await file.arrayBuffer();
                 const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
-                const totalPages = pdf.numPages;
+                
                 const actualStart = Math.max(1, parseInt(startPageInput.value) || 1);
-                const actualEnd = Math.min(totalPages, parseInt(endPageInput.value) || totalPages);
+                const actualEnd = Math.min(pdf.numPages, parseInt(endPageInput.value) || pdf.numPages);
 
                 for (let i = actualStart; i <= actualEnd; i++) {
                     addLog(`[${i}/${actualEnd}] ページ処理中...`);
