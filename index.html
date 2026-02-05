@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>日本語見開き縦書きPDFのOCR</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-    <script src="https://codoc.jp/js/cms.js" data-css="rainbow-square" data-usercode="cFhPkVEVKg" charset="UTF-8" defer></script>
     
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 20px auto; padding: 20px; background-color: #f5f5f7; color: #1d1d1f; }
@@ -13,10 +12,9 @@
         .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; position: relative; }
         strong.label { display: block; margin-bottom: 12px; color: #0071e3; font-size: 1.1em; }
         
-        .important-note { font-size: 0.8em; color: #1d1d1f; background: #ffffff; padding: 15px; border-radius: 8px; margin: 15px 0; border: 1px solid #d2d2d7; line-height: 1.6; }
+        .important-note { font-size: 0.85em; color: #1d1d1f; background: #ffffff; padding: 15px; border-radius: 8px; margin: 15px 0; border: 1px solid #d2d2d7; line-height: 1.6; }
         .important-note a { color: #0071e3; text-decoration: underline; font-weight: bold; }
-        .privacy-highlight { color: #d70015; font-weight: bold; }
-        .free-badge { display: inline-block; background: #34c759; color: white; padding: 2px 8px; border-radius: 4px; font-weight: bold; margin-right: 5px; }
+        .privacy-highlight { color: #1d1d1f; font-weight: bold; }
 
         .comparison-table { width: 100%; border-collapse: collapse; font-size: 0.8em; margin: 15px 0; background: #f9f9fb; }
         .comparison-table th, .comparison-table td { border: 1px solid #d2d2d7; padding: 8px; text-align: center; }
@@ -35,14 +33,11 @@
         #log { background: #ffffff; color: #333; padding: 15px; border: 1px solid #d2d2d7; border-radius: 8px; height: 120px; overflow-y: auto; font-size: 13px; line-height: 1.6; }
         textarea { width: 100%; height: 500px; border: 1px solid #d2d2d7; border-radius: 8px; padding: 15px; font-size: 15px; line-height: 1.8; margin-top: 10px; resize: vertical; }
         
-        .minimal-support { text-align: center; margin-top: 40px; padding: 20px 0; border-top: 1px solid #e5e5e7; }
-        .minimal-support p { font-size: 0.75em; color: #86868b; margin-bottom: 10px; line-height: 1.6; }
-        .codoc-wrapper { transform: scale(0.8); transform-origin: center; filter: grayscale(100%); opacity: 0.6; transition: 0.3s; }
-        .codoc-wrapper:hover { filter: grayscale(0%); opacity: 1; }
-
         .warning-box { background: #fffdf5; border: 1px solid #f0e6cc; padding: 8px 12px; border-radius: 6px; font-size: 0.75em; color: #665c3d; margin: 10px 0; }
         .log-error { color: #ff3b30; font-weight: bold; }
         .log-success { color: #34c759; font-weight: bold; }
+
+        footer { text-align: center; margin-top: 40px; padding: 20px; font-size: 0.8em; color: #86868b; border-top: 1px solid #e5e5e7; }
     </style>
 </head>
 <body>
@@ -55,9 +50,9 @@
         <input type="password" id="apiKey" placeholder="Gemini APIキーを入力">
 
         <div class="important-note">
-            <span class="free-badge">無料</span> このツールはGemini APIの<strong>無料枠内で使えます。</strong><br><br>
+            このツールはGemini APIの<strong>無料枠内で使えます。</strong><br><br>
             🔑 <strong>Gemini APIキーについて:</strong> <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>で取得できます。※無料枠内での利用であっても、Googleの仕様上、<strong>支払い手段の登録が必要</strong>です。登録したAPIはローカルに保存され、ツール制作者には見られません。<br>
-            ⚠️ <span class="privacy-highlight">学習への利用について:</span> 無料枠で取得したAPIキーを使用する場合、入力したデータはGoogleのモデル改善のために学習に利用される可能性があります。機密性の高い資料を扱う際はご注意ください。
+            ⚠️ <strong>学習への利用について:</strong> 無料枠で取得したAPIキーを使用する場合、入力したデータはGoogleのモデル改善のために学習に利用される可能性があります。機密性の高い資料を扱う際はご注意ください。
         </div>
         
         <table class="comparison-table">
@@ -112,18 +107,11 @@
         <textarea id="result" placeholder="ここに結果が表示されます..."></textarea>
     </div>
 
-    <div class="minimal-support">
-        <p>
-            このツールがお役に立ちましたら、応援をいただけると励みになります！<br>
-            さらに人文社会科学系のためのツールを作っていきます。
-        </p>
-        <div class="codoc-wrapper">
-            <div id="codoc-entry-3JKCLfl2SA" class="codoc-entries" data-without-body="1" data-support-message="応援する"></div>
-        </div>
-    </div>
+    <footer>
+        人文社会科学系のためのデジタルツール
+    </footer>
 
     <script type="module">
-        // (JavaScript部分は前回と同様のため省略。そのまま利用可能です)
         import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
@@ -166,13 +154,16 @@
             const key = apiKeyInput.value;
             const selectedModel = modelSelect.value;
             if (!file || !key) { alert("PDFとAPIキーが必要です。"); return; }
+            
             logArea.innerHTML = "";
             resultArea.value = "";
+
             try {
                 const genAI = new GoogleGenerativeAI(key);
                 const model = genAI.getGenerativeModel({ model: selectedModel });
                 const arrayBuffer = await file.arrayBuffer();
                 const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+                
                 const actualStart = Math.max(1, parseInt(startPageInput.value) || 1);
                 const actualEnd = Math.min(pdf.numPages, parseInt(endPageInput.value) || pdf.numPages);
 
@@ -185,20 +176,27 @@
                     canvas.height = viewport.height;
                     canvas.width = viewport.width;
                     await page.render({canvasContext: ctx, viewport: viewport}).promise;
+                    
                     const mid = canvas.width / 2;
                     const margin = canvas.width * 0.05;
-                    const sides = [{ name: "右段", x: mid - margin, w: mid + margin }, { name: "左段", x: 0, w: mid + margin }];
+                    const sides = [
+                        { name: "右段", x: mid - margin, w: mid + margin },
+                        { name: "左段", x: 0, w: mid + margin }
+                    ];
+
                     let pageText = `--- Page ${i} ---\n`;
                     for (const side of sides) {
                         const sCanvas = document.createElement('canvas');
                         sCanvas.width = side.w; sCanvas.height = canvas.height;
                         sCanvas.getContext('2d').drawImage(canvas, side.x, 0, side.w, canvas.height, 0, 0, side.w, canvas.height);
                         const base64Data = sCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+                        
                         const prompt = `あなたは日本語文書の専門家です。提示された画像（日本語・縦書きの${side.name}）を、以下のルールに厳格に従ってテキスト化してください。
                         1. 改行の整理: 1行ごとの物理的な改行はすべて削除し、一つの意味の通る文章として繋げてください。
                         2. 段落の維持: 文頭が一文字下がっている箇所や、明確な話題の切り替わりがある箇所のみ、改行（段落分け）を行ってください。
                         3. ノイズ除去: ページ端の欠けやノイズ、隣の段の文字は無視してください。
                         4. 出力制限: 書き起こした本文のみを出力し、解説やメタデータは含めないでください。`;
+
                         const result = await model.generateContent([{ inlineData: { data: base64Data, mimeType: "image/jpeg" } }, prompt]);
                         pageText += result.response.text() + "\n";
                         await new Promise(r => setTimeout(r, 800));
