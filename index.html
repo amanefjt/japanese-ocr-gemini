@@ -14,8 +14,7 @@
         
         .important-note { font-size: 0.85em; color: #1d1d1f; background: #ffffff; padding: 15px; border-radius: 8px; margin: 15px 0; border: 1px solid #d2d2d7; line-height: 1.6; }
         .important-note a { color: #0071e3; text-decoration: underline; font-weight: bold; }
-        .privacy-highlight { color: #1d1d1f; font-weight: bold; }
-
+        
         .comparison-table { width: 100%; border-collapse: collapse; font-size: 0.8em; margin: 15px 0; background: #f9f9fb; }
         .comparison-table th, .comparison-table td { border: 1px solid #d2d2d7; padding: 8px; text-align: center; }
         .comparison-table th { background: #f0f0f4; font-weight: 600; }
@@ -35,6 +34,7 @@
         
         .warning-box { background: #fffdf5; border: 1px solid #f0e6cc; padding: 8px 12px; border-radius: 6px; font-size: 0.75em; color: #665c3d; margin: 10px 0; }
         .log-error { color: #ff3b30; font-weight: bold; }
+        .log-retry { color: #f5a623; font-weight: bold; }
         .log-success { color: #34c759; font-weight: bold; }
 
         footer { text-align: center; margin-top: 40px; padding: 20px; font-size: 0.8em; color: #86868b; border-top: 1px solid #e5e5e7; }
@@ -45,13 +45,13 @@
     <h2>日本語見開き縦書きPDFのOCR</h2>
 
     <div class="card">
-        <strong class="label">1. 設定（Gemini APIキーとモデル）</strong>
+        <strong class="label">1. 設定（APIキーとモデル）</strong>
         
         <input type="password" id="apiKey" placeholder="Gemini APIキーを入力">
 
         <div class="important-note">
             このツールはGemini APIの<strong>無料枠内で使えます。</strong><br><br>
-            🔑 <strong>Gemini APIキーについて:</strong> <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>で取得できます。無料枠を利用したツールですが、Googleの仕様上、<strong>支払い手段の登録が必要</strong>です。登録したAPIはローカルに保存され、ツール制作者には見られません。<br>
+            🔑 <strong>Gemini APIキーについて:</strong> <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>で取得できます。※無料枠内での利用であっても、Googleの仕様上、<strong>支払い手段の登録が必要</strong>です。登録したAPIはローカルに保存され、ツール制作者には見られません。<br>
             ⚠️ <strong>学習への利用について:</strong> 無料枠で取得したAPIキーを使用する場合、入力したデータはGoogleのモデル改善のために学習に利用される可能性があります。機密性の高い資料を扱う際はご注意ください。
         </div>
         
@@ -108,7 +108,7 @@
     </div>
 
     <footer>
-        
+        人文社会科学系のためのデジタルツール
     </footer>
 
     <script type="module">
@@ -143,6 +143,7 @@
         const addLog = (msg, type = '') => {
             const div = document.createElement('div');
             if (type === 'error') div.className = 'log-error';
+            if (type === 'retry') div.className = 'log-retry';
             if (type === 'success') div.className = 'log-success';
             div.innerHTML = msg;
             logArea.appendChild(div);
@@ -178,10 +179,12 @@
                     await page.render({canvasContext: ctx, viewport: viewport}).promise;
                     
                     const mid = canvas.width / 2;
-                    const margin = canvas.width * 0.05;
+                    const margin = Math.floor(canvas.width * 0.05); // Python版(5%)の移植
+                    
+                    // Python版の座標指定ロジック
                     const sides = [
-                        { name: "右段", x: mid - margin, w: mid + margin },
-                        { name: "左段", x: 0, w: mid + margin }
+                        { name: "右側", x: mid - margin, w: canvas.width - (mid - margin) },
+                        { name: "左側", x: 0, w: mid + margin }
                     ];
 
                     let pageText = `--- Page ${i} ---\n`;
@@ -191,22 +194,44 @@
                         sCanvas.getContext('2d').drawImage(canvas, side.x, 0, side.w, canvas.height, 0, 0, side.w, canvas.height);
                         const base64Data = sCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
                         
-                        const prompt = `あなたは日本語文書の専門家です。提示された画像（日本語・縦書きの${side.name}）を、以下のルールに厳格に従ってテキスト化してください。
-                        1. 改行の整理: 1行ごとの物理的な改行はすべて削除し、一つの意味の通る文章として繋げてください。
-                        2. 段落の維持: 文頭が一文字下がっている箇所や、明確な話題の切り替わりがある箇所のみ、改行（段落分け）を行ってください。
-                        3. ノイズ除去: ページ端の欠けやノイズ、隣の段の文字は無視してください。
-                        4. 出力制限: 書き起こした本文のみを出力し、解説やメタデータは含めないでください。`;
+                        // Python版の最強プロンプト
+                        const prompt = `あなたはプロの校正者です。提示された画像（日本語・縦書きの${side.name}）をテキスト化してください。
 
-                        const result = await model.generateContent([{ inlineData: { data: base64Data, mimeType: "image/jpeg" } }, prompt]);
-                        pageText += result.response.text() + "\n";
-                        await new Promise(r => setTimeout(r, 800));
+【最優先ルール】
+1. 文章を繋げる: 1行ごとの物理的な改行はすべて削除し、一つの意味の通る文章として繋げてください。
+2. 段落の維持: 文頭が一文字下がっている箇所や、明確な話題の切り替わりがある箇所のみ、改行（段落分け）を行ってください。
+3. ゴミの排除: ページ端のノイズや、半分切れている隣の段の文字は完全に無視してください。
+4. 本文のみ: 解説やメタデータは一切出力しないでください。`;
+
+                        // === リトライロジック (Python版の移植) ===
+                        let success = false;
+                        let maxRetries = 3;
+                        for (let attempt = 0; attempt < maxRetries; attempt++) {
+                            try {
+                                const result = await model.generateContent([{ inlineData: { data: base64Data, mimeType: "image/jpeg" } }, prompt]);
+                                pageText += result.response.text() + "\n";
+                                success = true;
+                                break;
+                            } catch (err) {
+                                const msg = err.message || "";
+                                if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("503")) {
+                                    const waitSec = 30 * (attempt + 1);
+                                    addLog(`  [!] ${side.name}: 制限中... ${waitSec}秒待機 (${attempt + 1}/${maxRetries})`, 'retry');
+                                    await new Promise(r => setTimeout(r, waitSec * 1000));
+                                } else {
+                                    addLog(`  [x] ${side.name}でエラー: ${msg.substring(0, 50)}`, 'error');
+                                    break;
+                                }
+                            }
+                        }
+                        await new Promise(r => setTimeout(r, 1000)); // 基本待機
                     }
                     resultArea.value += pageText + "\n";
                     resultArea.scrollTop = resultArea.scrollHeight;
                     addLog(`[${i}/${actualEnd}] 完了`, 'success');
                 }
                 addLog("すべての処理が完了しました。", 'success');
-            } catch (err) { addLog("エラー: " + err.message, 'error'); }
+            } catch (err) { addLog("重大なエラー: " + err.message, 'error'); }
         };
     </script>
 </body>
