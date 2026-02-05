@@ -204,7 +204,13 @@
                         sCanvas.getContext('2d').drawImage(canvas, side.x, 0, side.w, canvas.height, 0, 0, side.w, canvas.height);
                         const base64Data = sCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
                         
-                        const prompt = `あなたはプロの編集者です。この画像（縦書きで一段組、または二段組の${side.name}）を正確に書き起こしてください。物理的な行末の改行は繋げ、意味的な段落（一文字下げ等）の区切りだけ改行してください。本文のみ出力してください。`;
+                        const prompt = `あなたはプロの編集者です。この画像（縦書きで一段組、または二段組の${side.name}）を正確に書き起こしてください。
+                        【最優先ルール】
+                    1. 文章を繋げる: 1行の終わりで発生している物理的な改行はすべて削除し、一つの意味の通る文章として繋げてください。
+                    2. 段落の維持: 文頭が一文字下がっている箇所や、明らかに話題が変わる箇所のみ、改行（段落分け）を行ってください。
+                    3. ゴミの排除: ページ端のノイズや、半分切れている隣の段の文字は完全に無視してください。
+                    4. 本文のみ: 解説や挨拶は一切不要です。
+                    `;
 
                         const result = await model.generateContent([
                             { inlineData: { data: base64Data, mimeType: "image/jpeg" } },
