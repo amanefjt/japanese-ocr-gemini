@@ -10,6 +10,13 @@
         h2 { text-align: center; color: #333; margin-bottom: 30px; }
         .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
         strong { display: block; margin-bottom: 10px; color: #0071e3; }
+        
+        /* 案内テキストのスタイル */
+        .info-box { font-size: 0.9em; line-height: 1.6; color: #515154; margin-bottom: 15px; background: #f9f9fb; padding: 15px; border-radius: 8px; border-left: 4px solid #0071e3; }
+        .info-box a { color: #0071e3; font-weight: bold; text-decoration: none; }
+        .info-box a:hover { text-decoration: underline; }
+        .safe-tag { display: inline-block; background: #34c759; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; margin-bottom: 10px; font-weight: bold; }
+
         input[type="password"], input[type="file"] { width: 100%; padding: 10px; border: 1px solid #d2d2d7; border-radius: 8px; box-sizing: border-box; margin-bottom: 10px; }
         button { background-color: #0071e3; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; font-size: 16px; transition: background 0.2s; }
         button:hover { background-color: #0077ed; }
@@ -25,6 +32,17 @@
 
     <div class="card">
         <strong>1. 設定（APIキー）</strong>
+        
+        <div class="info-box">
+            🔑 <strong>APIキーの取得:</strong><br>
+            Google AI Studioで<a href="https://aistudio.google.com/app/apikey" target="_blank">無料のAPIキーを取得</a>できます。大量のPDFを一度に処理しない限り、無料で利用可能です。
+        </div>
+
+        <div class="safe-tag">安全性について</div>
+        <div class="info-box" style="border-left-color: #34c759;">
+            🛡️ 入力したキーはあなたのブラウザ（LocalStorage）にのみ保存されます。作者を含む第三者に送信されることは一切ありませんので、安心してご利用ください。
+        </div>
+
         <input type="password" id="apiKey" placeholder="APIキーを入力してください">
         <button id="saveKeyBtn">設定を保存する</button>
     </div>
@@ -63,14 +81,13 @@
             logArea.scrollTop = logArea.scrollHeight;
         };
 
-        // 初期表示をクリアするための関数
         const clearLog = () => { logArea.innerHTML = ""; };
 
         apiKeyInput.value = localStorage.getItem('gemini_api_key') || "";
 
         document.getElementById('saveKeyBtn').onclick = () => {
             localStorage.setItem('gemini_api_key', apiKeyInput.value);
-            alert("設定を保存しました。");
+            alert("設定をブラウザに保存しました。");
         };
 
         document.getElementById('startBtn').onclick = async () => {
@@ -88,6 +105,7 @@
 
             try {
                 const genAI = new GoogleGenerativeAI(key);
+                // 最新のFlashモデルを指定
                 const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
                 const arrayBuffer = await file.arrayBuffer();
@@ -97,14 +115,14 @@
                 for (let i = 1; i <= pdf.numPages; i++) {
                     addLog(`[${i}/${pdf.numPages}] ページを解析中...`);
                     const page = await pdf.getPage(i);
-                    const viewport = page.getPageViewport({scale: 2.0});
+                    // 解像度を上げて読み取り精度を向上
+                    const viewport = page.getViewport({scale: 2.5});
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
                     canvas.height = viewport.height;
                     canvas.width = viewport.width;
                     await page.render({canvasContext: ctx, viewport: viewport}).promise;
                     
-                    // 左右分割ロジック
                     const mid = canvas.width / 2;
                     const margin = canvas.width * 0.05;
                     const sides = [
@@ -121,4 +139,29 @@
                         
                         const base64Data = sCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
                         
-                        const prompt = `あなたはプロの編集者です。この画像（縦書き二段組の${side.name}）を書き起こしてください。物理的な改行は繋げ、意味的な段落のみ
+                        const prompt = `あなたはプロの編集者です。この画像（縦書き二段組の${side.name}）を正確に書き起こしてください。物理的な行末の改行は繋げ、意味的な段落（一文字下げ等）の区切りだけ改行してください。本文のみ出力してください。`;
+
+                        const result = await model.generateContent([
+                            { inlineData: { data: base64Data, mimeType: "image/jpeg" } },
+                            prompt
+                        ]);
+
+                        pageText += result.response.text() + "\n";
+                    }
+
+                    resultArea.value += pageText + "\n";
+                    resultArea.scrollTop = resultArea.scrollHeight;
+                    addLog(`[${i}/${pdf.numPages}] 完了`, 'success');
+
+                    await new Promise(r => setTimeout(r, 2000));
+                }
+                addLog("すべての処理が完了しました。", 'success');
+
+            } catch (err) {
+                addLog("エラーが発生しました: " + err.message, 'error');
+                console.error(err);
+            }
+        };
+    </script>
+</body>
+</html>
