@@ -18,9 +18,15 @@
         .comparison-table th, .comparison-table td { border: 1px solid #d2d2d7; padding: 8px; text-align: center; }
         .comparison-table th { background: #f0f0f4; font-weight: 600; }
 
+        .warning-box { background: #fff9e6; border: 1px solid #ffe58f; padding: 12px; border-radius: 8px; font-size: 0.8em; color: #856404; margin-bottom: 15px; line-height: 1.6; }
         .safe-info { font-size: 0.8em; color: #86868b; margin-top: 4px; margin-bottom: 12px; display: flex; align-items: flex-start; gap: 4px; line-height: 1.4; }
 
         input, select { width: 100%; padding: 12px; border: 1px solid #d2d2d7; border-radius: 8px; box-sizing: border-box; margin-bottom: 8px; font-size: 14px; background: #fafafa; }
+        
+        /* 範囲指定用の横並び入力欄 */
+        .range-container { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
+        .range-container input { width: 80px; margin-bottom: 0; text-align: center; }
+
         button { background-color: #0071e3; color: white; border: none; padding: 14px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; font-size: 16px; transition: all 0.2s; }
         button:hover { background-color: #0077ed; transform: translateY(-1px); }
         
@@ -38,7 +44,7 @@
     <div class="card">
         <strong class="label">1. 設定（Gemini APIキーとモデル）</strong>
         <div class="description">
-            🔑 <strong>Gemini APIキーの取得:</strong> <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>で取得可能。なお、無料枠での利用にも支払い情報の登録が必要です。
+            🔑 <strong>Gemini APIキーの取得:</strong> <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>で取得可能。無料枠でも支払い情報の登録が必要です。
         </div>
 
         <input type="password" id="apiKey" placeholder="APIキーを入力">
@@ -73,16 +79,29 @@
             </tbody>
         </table>
 
+        <div class="warning-box">
+            ⚠️ <strong>長文PDFのコツ:</strong> ブラウザのメモリ制限を避けるため、<strong>一度に100ページ程度ずつ</strong>に範囲を絞って処理することをお勧めします。
+        </div>
+
         <div class="safe-info">
-            🛡️ <span><strong>安全性とデータ:</strong> キーはブラウザに保存され、作者には送信されません。無料枠では入力内容が学習に利用される場合があります。</span>
+            🛡️ <span><strong>安全性:</strong> キーはブラウザにのみ保存され、作者には送信されません。無料枠では入力内容が学習に利用される場合があります。</span>
         </div>
 
         <button id="saveKeyBtn">設定を保存する</button>
     </div>
 
     <div class="card">
-        <strong class="label">2. OCRを実行するPDFを選択</strong>
+        <strong class="label">2. 実行設定</strong>
         <input type="file" id="pdfFile" accept="application/pdf">
+        
+        <div style="margin: 15px 0 5px 0; font-size: 0.9em; font-weight: bold; color: #333;">処理するページ範囲:</div>
+        <div class="range-container">
+            <input type="number" id="startPage" value="1" min="1">
+            <span>ページから</span>
+            <input type="number" id="endPage" placeholder="最後" min="1">
+            <span>ページまで</span>
+        </div>
+        
         <button id="startBtn">OCR処理を開始する</button>
     </div>
 
@@ -105,6 +124,8 @@
         const resultArea = document.getElementById('result');
         const apiKeyInput = document.getElementById('apiKey');
         const modelSelect = document.getElementById('modelSelect');
+        const startPageInput = document.getElementById('startPage');
+        const endPageInput = document.getElementById('endPage');
 
         const addLog = (msg, type = '') => {
             const div = document.createElement('div');
@@ -132,8 +153,6 @@
             if (!file || !key) { alert("PDFとAPIキーが必要です。"); return; }
 
             logArea.innerHTML = "";
-            addLog(`使用モデル: ${selectedModel}`);
-            addLog(`処理を開始します: ${file.name}`);
             resultArea.value = "";
 
             try {
@@ -142,12 +161,27 @@
 
                 const arrayBuffer = await file.arrayBuffer();
                 const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
-                addLog(`PDF解析成功: 全 ${pdf.numPages} ページ`);
+                
+                const totalPages = pdf.numPages;
+                const startRange = parseInt(startPageInput.value) || 1;
+                const endRange = parseInt(endPageInput.value) || totalPages;
 
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    addLog(`[${i}/${pdf.numPages}] ページを解析中...`);
+                // 入力バリデーション
+                const actualStart = Math.max(1, startRange);
+                const actualEnd = Math.min(totalPages, endRange);
+
+                if (actualStart > actualEnd) {
+                    addLog("エラー: 開始ページが終了ページを超えています。", "error");
+                    return;
+                }
+
+                addLog(`PDF解析成功: 全 ${totalPages} ページ`);
+                addLog(`処理範囲: ${actualStart} ～ ${actualEnd} ページ`);
+                addLog(`使用モデル: ${selectedModel}`);
+
+                for (let i = actualStart; i <= actualEnd; i++) {
+                    addLog(`[${i}/${actualEnd}] ページを解析中...`);
                     const page = await pdf.getPage(i);
-                    // より確実な viewport 取得方法
                     const viewport = page.getViewport({scale: 2.5});
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
@@ -179,18 +213,19 @@
 
                         pageText += result.response.text() + "\n";
                         
-                        // 1リクエストごとに安全な待機時間を確保
+                        // レート制限対策
                         await new Promise(r => setTimeout(r, 600));
                     }
 
                     resultArea.value += pageText + "\n";
                     resultArea.scrollTop = resultArea.scrollHeight;
-                    addLog(`[${i}/${pdf.numPages}] 完了`, 'success');
+                    addLog(`[${i}/${actualEnd}] 完了`, 'success');
                 }
-                addLog("すべて完了しました。", 'success');
+                addLog("指定範囲の処理がすべて完了しました。", 'success');
 
             } catch (err) {
                 addLog("エラー: " + err.message, 'error');
+                console.error(err);
             }
         };
     </script>
