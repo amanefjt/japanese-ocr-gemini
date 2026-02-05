@@ -26,11 +26,27 @@
         button { background-color: #0071e3; color: white; border: none; padding: 14px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; font-size: 16px; transition: 0.2s; }
         button:hover { background-color: #0077ed; transform: translateY(-1px); }
         
+        /* 4. 書き起こし結果 のレイアウト調整 */
+        .result-header { display: flex; align-items: center; justify-content: flex-start; gap: 15px; margin-bottom: 5px; }
         .copy-btn { width: auto; font-size: 13px; padding: 8px 16px; margin-bottom: 10px; background-color: #34c759; }
         .copy-success { font-size: 12px; color: #34c759; margin-left: 10px; font-weight: bold; opacity: 0; transition: 0.3s; }
 
         #log { background: #ffffff; color: #333; padding: 15px; border: 1px solid #d2d2d7; border-radius: 8px; height: 120px; overflow-y: auto; font-size: 13px; line-height: 1.6; }
-        textarea { width: 100%; height: 500px; border: 1px solid #d2d2d7; border-radius: 8px; padding: 15px; font-size: 15px; line-height: 1.8; margin-top: 10px; resize: vertical; }
+        
+        /* ボックスはみ出し防止修正 */
+        textarea { 
+            width: 100%; 
+            height: 500px; 
+            border: 1px solid #d2d2d7; 
+            border-radius: 8px; 
+            padding: 15px; 
+            font-size: 15px; 
+            line-height: 1.8; 
+            margin-top: 10px; 
+            resize: vertical; 
+            box-sizing: border-box; 
+            display: block; 
+        }
         
         .warning-box { background: #fffdf5; border: 1px solid #f0e6cc; padding: 8px 12px; border-radius: 6px; font-size: 0.75em; color: #665c3d; margin: 10px 0; }
         .log-error { color: #ff3b30; font-weight: bold; }
@@ -100,7 +116,7 @@
 
     <div class="card">
         <strong class="label">4. 書き起こし結果</strong>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div class="result-header">
             <button id="copyBtn" class="copy-btn">📋 全てコピーする</button>
             <span id="copyMsg" class="copy-success">コピー完了！</span>
         </div>
@@ -108,7 +124,7 @@
     </div>
 
     <footer>
-        
+        人文社会科学系のためのデジタルツール
     </footer>
 
     <script type="module">
@@ -179,9 +195,8 @@
                     await page.render({canvasContext: ctx, viewport: viewport}).promise;
                     
                     const mid = canvas.width / 2;
-                    const margin = Math.floor(canvas.width * 0.05); // Python版(5%)の移植
+                    const margin = Math.floor(canvas.width * 0.05); 
                     
-                    // Python版の座標指定ロジック
                     const sides = [
                         { name: "右側", x: mid - margin, w: canvas.width - (mid - margin) },
                         { name: "左側", x: 0, w: mid + margin }
@@ -194,16 +209,26 @@
                         sCanvas.getContext('2d').drawImage(canvas, side.x, 0, side.w, canvas.height, 0, 0, side.w, canvas.height);
                         const base64Data = sCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
                         
-                        // Python版の最強プロンプト
-                        const prompt = `あなたはプロの校正者です。提示された画像（日本語・縦書きの${side.name}）をテキスト化してください。
+                        // 高精度プロンプトへの差し替え
+                        const prompt = `指示：日本語書籍（縦書き・見開き）の超高精度テキスト化
 
-【最優先ルール】
-1. 文章を繋げる: 1行ごとの物理的な改行はすべて削除し、一つの意味の通る文章として繋げてください。
-2. 段落の維持: 文頭が一文字下がっている箇所や、明確な話題の切り替わりがある箇所のみ、改行（段落分け）を行ってください。
-3. ゴミの排除: ページ端のノイズや、半分切れている隣の段の文字は完全に無視してください。
-4. 本文のみ: 解説やメタデータは一切出力しないでください。`;
+1. 役割
+あなたは、国立国会図書館のデジタルアーカイブ化プロジェクトに従事する、世界最高峰のデータ入力エキスパートです。提示された画像（スキャンされた日本語の縦書き・見開きの${side.name}部分）を、一文字の妥協もなく、元の文章のレイアウトを完全に維持した状態でテキスト化してください。
 
-                        // === リトライロジック (Python版の移植) ===
+2. ドキュメント構造の理解
+縦書きの遵守: 各ページにおいて、右端の行から開始し、左端の行へと進んでください。一行内では上から下へと読み取ります。
+レイアウトの保存: 段落の区切りや改行は、画像内の意図を可能な限り反映させてください。
+
+3. 具体的な処理規則
+文字認識: 常用漢字、旧字体、ひらがな、カタカナ、句読点を正確に識別してください。
+推論による補完: 日本語の文脈を考慮し、不鮮明な文字や明らかなOCRエラーの場合は、前後の文脈から日本語として最も自然な文字を推論して埋めてください。固有名詞の修正には慎重であってください。
+ルビ（ふりがな）や表、図の扱い: 本文の改行位置を乱さないよう、ルビや表、図は読み飛ばしてください。
+空行とインデント: 段落冒頭の字下げや、章の変わり目の空行も画像通りに再現してください。
+不要な空白：文字間の不自然なスペースを自動的に削除して整形してください。
+
+4. 出力形式
+出力は純粋なMarkdown形式とし、挨拶や解説は一切含めないでください。`;
+
                         let success = false;
                         let maxRetries = 3;
                         for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -224,7 +249,7 @@
                                 }
                             }
                         }
-                        await new Promise(r => setTimeout(r, 1000)); // 基本待機
+                        await new Promise(r => setTimeout(r, 1000));
                     }
                     resultArea.value += pageText + "\n";
                     resultArea.scrollTop = resultArea.scrollHeight;
