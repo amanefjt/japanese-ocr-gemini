@@ -1,95 +1,52 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>Gemini OCR Web App</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-    <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 20px auto; padding: 20px; line-height: 1.6; }
-        .config, .upload { border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 8px; }
-        textarea { width: 100%; height: 300px; margin-top: 10px; }
-        #status { color: blue; font-weight: bold; }
-    </style>
-</head>
-<body>
-    <h2>Gemini 2.5 OCR Web App</h2>
+<script type="module">
+    import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 
-    <div class="config">
-        <label>Gemini API Key: </label>
-        <input type="password" id="apiKey" placeholder="AI Studio‚Åæ“¾‚µ‚½ƒL[‚ğ“ü—Í">
-        <button onclick="saveKey()">•Û‘¶</button>
-        <p style="font-size: 0.8em; color: gray;">¦ƒL[‚Íƒuƒ‰ƒEƒU‚É‚Ì‚İ•Û‘¶‚³‚ê‚Ü‚·</p>
-    </div>
+    window.startOCR = async () => {
+        // ...ï¼ˆåˆæœŸè¨­å®šéƒ¨åˆ†ã¯åŒã˜ï¼‰...
+        
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({scale: 2.5}); // é«˜è§£åƒåº¦ã«ã™ã‚‹
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+            await page.render({canvasContext: context, viewport: viewport}).promise;
 
-    <div class="upload">
-        <input type="file" id="pdfFile" accept="application/pdf">
-        <button onclick="startOCR()">OCRŠJn</button>
-    </div>
+            // --- å·¦å³ã«åˆ†å‰²ã—ã¦Geminiã«æŠ•ã’ã‚‹ ---
+            const mid = canvas.width / 2;
+            const margin = canvas.width * 0.05; // 5%ã®é‡ãªã‚Š
 
-    <div id="status"></div>
-    <textarea id="result" placeholder="Œ‹‰Ê‚ª‚±‚±‚É•\¦‚³‚ê‚Ü‚·..."></textarea>
+            // å³å´ã®Canvasã‚’ä½œæˆ
+            const rightCanvas = document.createElement('canvas');
+            rightCanvas.width = mid + margin;
+            rightCanvas.height = canvas.height;
+            rightCanvas.getContext('2d').drawImage(canvas, mid - margin, 0, mid + margin, canvas.height, 0, 0, mid + margin, canvas.height);
 
-    <script type="module">
-        // Google Gen AI SDK ‚Ìƒuƒ‰ƒEƒU”Å‚ğ“Ç‚İ‚İ
-        import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
+            // å·¦å´ã®Canvasã‚’ä½œæˆ
+            const leftCanvas = document.createElement('canvas');
+            leftCanvas.width = mid + margin;
+            leftCanvas.height = canvas.height;
+            leftCanvas.getContext('2d').drawImage(canvas, 0, 0, mid + margin, canvas.height, 0, 0, mid + margin, canvas.height);
 
-        window.saveKey = () => {
-            const key = document.getElementById('apiKey').value;
-            localStorage.setItem('gemini_api_key', key);
-            alert('•Û‘¶‚µ‚Ü‚µ‚½');
-        };
+            const parts = [
+                { name: "å³æ®µ", data: rightCanvas.toDataURL('image/jpeg', 0.8).split(',')[1] },
+                { name: "å·¦æ®µ", data: leftCanvas.toDataURL('image/jpeg', 0.8).split(',')[1] }
+            ];
 
-        window.startOCR = async () => {
-            const fileInput = document.getElementById('pdfFile');
-            const apiKey = localStorage.getItem('gemini_api_key') || document.getElementById('apiKey').value;
-            const status = document.getElementById('status');
-            const resultArea = document.getElementById('result');
-
-            if (!fileInput.files[0] || !apiKey) return alert('PDF‚ÆAPIƒL[‚ª•K—v‚Å‚·');
-
-            status.innerText = "PDF‚ğ‰ğÍ’†...";
-            const genAI = new GoogleGenerativeAI(apiKey);
-            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-            const file = fileInput.files[0];
-            const arrayBuffer = await file.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
-
-            resultArea.value = "";
-
-            for (let i = 1; i <= pdf.numPages; i++) {
-                status.innerText = `ƒy[ƒW ${i} / ${pdf.numPages} ‚ğˆ—’†...`;
-                
-                // ƒuƒ‰ƒEƒUã‚ÅPDF‚ğ‰æ‘œiCanvasj‚É•ÏŠ·
-                const page = await pdf.getPage(i);
-                const viewport = page.getViewport({scale: 2.0});
-                const canvas = document.createElement('canvas');
-                const context = canvas.getContext('2d');
-                canvas.height = viewport.height;
-                canvas.width = viewport.width;
-                await page.render({canvasContext: context, viewport: viewport}).promise;
-
-                // Canvas‚ğBase64‰æ‘œ‚É•ÏŠ·‚µ‚ÄGemini‚É‘—‚é
-                const base64Image = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
-                
-                const prompt = "c‘‚«‚Åˆê’i‘gA‚Ü‚½‚Í“ñ’i‘g‚Ì“ú–{Œê•¶‘‚Å‚·B•¨—“I‚È‰üs‚ğŒq‚¬AˆÓ–¡“I‚È’i—‚ğˆÛ‚µ‚ÄƒeƒLƒXƒg‰»‚µ‚Ä‚­‚¾‚³‚¢B";
-                
+            for (const part of parts) {
+                const prompt = `ã“ã‚Œã¯ç¸¦æ›¸ãã§ã€ä¸€æ®µçµ„ã¾ãŸã¯äºŒæ®µçµ„æ–‡æ›¸ã®ã€Œ${part.name}ã€ã§ã™ã€‚ç‰©ç†çš„ãªæ”¹è¡Œã‚’ç¹‹ãã€æ„å‘³çš„ãªæ®µè½ã‚’ç¶­æŒã—ã¦ãƒ†ã‚­ã‚¹ãƒˆåŒ–ã—ã¦ãã ã•ã„ã€‚`;
                 try {
                     const result = await model.generateContent([
                         prompt,
-                        { inlineData: { data: base64Image, mimeType: "image/jpeg" } }
+                        { inlineData: { data: part.data, mimeType: "image/jpeg" } }
                     ]);
-                    const text = result.response.text();
-                    resultArea.value += `--- Page ${i} ---_n${text}_n_n`;
+                    resultArea.value += result.response.text() + "\n";
                 } catch (e) {
-                    resultArea.value += `--- Page ${i} Error ---_n${e.message}_n_n`;
+                    console.error(e);
                 }
-                
-                // ƒŒ[ƒg§ŒÀ‘Îôi1.5•b‘Ò‹@j
-                await new Promise(r => setTimeout(r, 1500));
+                await new Promise(r => setTimeout(r, 2000)); // 2ç§’å¾…æ©Ÿ
             }
-            status.innerText = "‚·‚×‚Ä‚Ìˆ—‚ªŠ®—¹‚µ‚Ü‚µ‚½B";
-        };
-    </script>
-</body>
-</html>
+        }
+    };
+</script>
