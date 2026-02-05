@@ -3,65 +3,125 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gemini OCR Web App (Debug Ver.)</title>
+    <title>Gemini OCR - Diagnostic Version</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 20px auto; padding: 20px; background: #f0f2f5; }
-        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        button { background: #0071e3; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
-        textarea { width: 100%; height: 300px; border: 1px solid #ccc; border-radius: 5px; padding: 10px; font-size: 14px; }
-        #status { padding: 10px; margin: 10px 0; border-radius: 5px; font-weight: bold; }
-        .loading { background: #e3f2fd; color: #0d47a1; border: 1px solid #bbdefb; }
-        .error { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
-        .success { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
+        body { font-family: sans-serif; max-width: 800px; margin: 20px auto; padding: 20px; background: #f4f4f9; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        button { background: #0071e3; color: white; border: none; padding: 12px 24px; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:disabled { background: #ccc; }
+        #log { background: #000; color: #0f0; padding: 15px; border-radius: 5px; font-family: monospace; height: 200px; overflow-y: scroll; font-size: 12px; }
+        textarea { width: 100%; height: 200px; margin-top: 10px; }
+        .error-text { color: red; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h2>Gemini OCR Web App</h2>
+    <h2>Gemini OCR (自己診断モード)</h2>
 
     <div class="card">
-        <strong>1. APIキー</strong><br>
-        <input type="password" id="apiKey" style="width:70%; padding:5px;">
-        <button onclick="saveKey()">保存</button>
+        <strong>1. 診断ログ（ここを確認してください）</strong>
+        <div id="log">アプリを初期化中...<br></div>
     </div>
 
     <div class="card">
-        <strong>2. PDF選択</strong><br>
+        <strong>2. 設定</strong><br>
+        <input type="password" id="apiKey" placeholder="APIキーを入力" style="width: 70%; padding: 8px;">
+        <button id="saveKeyBtn">保存</button>
+    </div>
+
+    <div class="card">
+        <strong>3. PDF実行</strong><br>
         <input type="file" id="pdfFile" accept="application/pdf">
         <button id="startBtn">OCRを開始する</button>
     </div>
 
-    <div id="status">ここに現在の状況が表示されます</div>
-
     <div class="card">
-        <strong>3. 結果</strong><br>
+        <strong>4. 結果</strong><br>
         <textarea id="result"></textarea>
     </div>
 
     <script type="module">
-        import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
-
-        // PDF.jsの設定
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
-
-        const status = document.getElementById('status');
-        const resultArea = document.getElementById('result');
-
-        window.saveKey = () => {
-            const key = document.getElementById('apiKey').value;
-            localStorage.setItem('gemini_api_key', key);
-            alert('保存しました');
+        const logArea = document.getElementById('log');
+        const addLog = (msg, isError = false) => {
+            const span = document.createElement('span');
+            if (isError) span.className = 'error-text';
+            span.innerHTML = `> ${msg}<br>`;
+            logArea.appendChild(span);
+            logArea.scrollTop = logArea.scrollHeight;
         };
 
-        const updateStatus = (msg, type = 'loading') => {
-            status.innerText = msg;
-            status.className = type;
+        addLog("ライブラリ読み込み中...");
+
+        // ライブラリの読み込みチェック
+        import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
+        
+        try {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+            addLog("PDF.js 準備完了");
+            addLog("Gemini SDK 準備完了");
+        } catch (e) {
+            addLog("初期化エラー: " + e.message, true);
+        }
+
+        // 保存済みキー
+        const apiKeyInput = document.getElementById('apiKey');
+        apiKeyInput.value = localStorage.getItem('gemini_api_key') || "";
+
+        document.getElementById('saveKeyBtn').onclick = () => {
+            localStorage.setItem('gemini_api_key', apiKeyInput.value);
+            addLog("APIキーをブラウザに保存しました");
+            alert("保存しました");
         };
 
         document.getElementById('startBtn').onclick = async () => {
+            addLog("ボタンが押されました");
             const file = document.getElementById('pdfFile').files[0];
-            const key = localStorage.getItem('gemini_api_key') || document.getElementById('apiKey').value;
+            const key = apiKeyInput.value;
 
-            if (!file || !key) {
-                updateStatus("エラー:
+            if (!file) { addLog("エラー: ファイルが選択されていません", true); return; }
+            if (!key) { addLog("エラー: APIキーが入力されていません", true); return; }
+
+            try {
+                addLog(`ファイル "${file.name}" を処理開始...`);
+                const genAI = new GoogleGenerativeAI(key);
+                const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+                const arrayBuffer = await file.arrayBuffer();
+                addLog("PDFをデータとして読み込みました");
+                
+                const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+                addLog(`PDF解析成功: 全 ${pdf.numPages} ページ`);
+
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    addLog(`ページ ${i} を処理中...`);
+                    const page = await pdf.getPage(i);
+                    const viewport = page.getViewport({scale: 1.5});
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    await page.render({canvasContext: ctx, viewport: viewport}).promise;
+                    
+                    const base64Data = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+                    addLog(`ページ ${i}: AIに送信中...`);
+
+                    const result = await model.generateContent([
+                        { inlineData: { data: base64Data, mimeType: "image/jpeg" } },
+                        "この画像をOCRしてください。改行を整理して日本語として読みやすく出力してください。"
+                    ]);
+
+                    document.getElementById('result').value += `--- Page ${i} ---\n` + result.response.text() + "\n\n";
+                    addLog(`ページ ${i}: 完了`);
+                    await new Promise(r => setTimeout(r, 2000));
+                }
+                addLog("すべて完了しました！");
+
+            } catch (err) {
+                addLog("実行エラー: " + err.message, true);
+                console.error(err);
+            }
+        };
+    </script>
+</body>
+</html>
