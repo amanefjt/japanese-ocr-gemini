@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>日本語見開き縦書きPDFをOCRする (Gemini API)</title>
+    <title>日本語見開き縦書きPDFのOCR</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://codoc.jp/js/cms.js" data-css="rainbow-square" data-usercode="cFhPkVEVKg" charset="UTF-8" defer></script>
     
@@ -13,7 +13,9 @@
         .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; position: relative; }
         strong.label { display: block; margin-bottom: 12px; color: #0071e3; font-size: 1.1em; }
         
-        /* 比較表（復活版） */
+        .important-note { font-size: 0.8em; color: #d70015; background: #fff2f2; padding: 10px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #ffcfcf; line-height: 1.5; }
+        .important-note a { color: #0071e3; text-decoration: underline; }
+
         .comparison-table { width: 100%; border-collapse: collapse; font-size: 0.8em; margin: 15px 0; background: #f9f9fb; }
         .comparison-table th, .comparison-table td { border: 1px solid #d2d2d7; padding: 8px; text-align: center; }
         .comparison-table th { background: #f0f0f4; font-weight: 600; }
@@ -22,19 +24,18 @@
         .range-container { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
         .range-container input { width: 80px; margin-bottom: 0; text-align: center; }
 
-        button { background-color: #0071e3; color: white; border: none; padding: 14px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; font-size: 16px; transition: all 0.2s; }
+        button { background-color: #0071e3; color: white; border: none; padding: 14px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; font-size: 16px; transition: 0.2s; }
         button:hover { background-color: #0077ed; transform: translateY(-1px); }
         
         .copy-btn { width: auto; font-size: 13px; padding: 8px 16px; margin-bottom: 10px; background-color: #34c759; }
-        .copy-success { font-size: 12px; color: #34c759; margin-left: 10px; font-weight: bold; opacity: 0; }
+        .copy-success { font-size: 12px; color: #34c759; margin-left: 10px; font-weight: bold; opacity: 0; transition: 0.3s; }
 
-        #log { background: #ffffff; color: #333; padding: 15px; border: 1px solid #d2d2d7; border-radius: 8px; height: 120px; overflow-y: auto; font-size: 13px; }
+        #log { background: #ffffff; color: #333; padding: 15px; border: 1px solid #d2d2d7; border-radius: 8px; height: 120px; overflow-y: auto; font-size: 13px; line-height: 1.6; }
         textarea { width: 100%; height: 500px; border: 1px solid #d2d2d7; border-radius: 8px; padding: 15px; font-size: 15px; line-height: 1.8; margin-top: 10px; resize: vertical; }
         
-        /* 応援エリア：極限まで地味に */
         .minimal-support { text-align: center; margin-top: 40px; padding: 20px 0; border-top: 1px solid #e5e5e7; }
-        .minimal-support p { font-size: 0.75em; color: #86868b; margin-bottom: 10px; }
-        .codoc-wrapper { transform: scale(0.85); transform-origin: center; filter: grayscale(100%); opacity: 0.7; transition: 0.3s; }
+        .minimal-support p { font-size: 0.75em; color: #86868b; margin-bottom: 10px; line-height: 1.6; }
+        .codoc-wrapper { transform: scale(0.8); transform-origin: center; filter: grayscale(100%); opacity: 0.6; transition: 0.3s; }
         .codoc-wrapper:hover { filter: grayscale(0%); opacity: 1; }
 
         .warning-box { background: #fff9e6; border: 1px solid #ffe58f; padding: 12px; border-radius: 8px; font-size: 0.8em; color: #856404; margin: 15px 0; }
@@ -44,10 +45,14 @@
 </head>
 <body>
 
-    <h2>日本語見開き縦書きPDFをOCRする (Gemini API)</h2>
+    <h2>日本語見開き縦書きPDFのOCR</h2>
 
     <div class="card">
-        <strong class="label">1. 設定（APIキーとモデル）</strong>
+        <strong class="label">1. 設定（Gemini APIキーとモデル）</strong>
+        
+        <div class="important-note">
+            🔑 <strong>Gemini APIキーについて:</strong> <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>で無料で取得できます。※無料枠内での利用であっても、Googleの仕様上、<strong>支払い手段の登録が必要</strong>です。登録したAPIはローカルに保存され、ツール制作者には見られません。
+
         <input type="password" id="apiKey" placeholder="Gemini APIキーを入力">
         
         <table class="comparison-table">
@@ -59,16 +64,8 @@
                 </tr>
             </thead>
             <tbody>
-                <tr>
-                    <td><strong>2.5 Flash</strong></td>
-                    <td>約5,000回</td>
-                    <td><strong>高精度</strong>・複雑な紙面向き</td>
-                </tr>
-                <tr>
-                    <td><strong>2.0 Flash</strong></td>
-                    <td>約1,500回</td>
-                    <td><strong>爆速</strong>・大量処理向き</td>
-                </tr>
+                <tr><td><strong>2.5 Flash</strong></td><td>約5,000枚</td><td><strong>高精度</strong>・複雑な紙面向き</td></tr>
+                <tr><td><strong>2.0 Flash</strong></td><td>約1,500枚</td><td><strong>爆速</strong>・大量処理向き</td></tr>
             </tbody>
         </table>
 
@@ -83,7 +80,7 @@
         <strong class="label">2. 実行設定</strong>
         <input type="file" id="pdfFile" accept="application/pdf">
         <div class="warning-box">
-            ⚠️ <strong>長文PDFのコツ:</strong> メモリ制限を避けるため、一度に100ページ程度ずつ処理することをお勧めします。
+            ⚠️ メモリ制限を避けるため、一度に100ページ程度ずつの処理をお勧めします。
         </div>
         <div class="range-container">
             <input type="number" id="startPage" value="1" min="1">
@@ -161,6 +158,7 @@
             const key = apiKeyInput.value;
             const selectedModel = modelSelect.value;
             if (!file || !key) { alert("PDFとAPIキーが必要です。"); return; }
+            
             logArea.innerHTML = "";
             resultArea.value = "";
 
@@ -174,7 +172,7 @@
                 const actualEnd = Math.min(totalPages, parseInt(endPageInput.value) || totalPages);
 
                 for (let i = actualStart; i <= actualEnd; i++) {
-                    addLog(`[${i}/${actualEnd}] 処理中...`);
+                    addLog(`[${i}/${actualEnd}] ページ処理中...`);
                     const page = await pdf.getPage(i);
                     const viewport = page.getViewport({scale: 2.5});
                     const canvas = document.createElement('canvas');
@@ -185,21 +183,24 @@
                     
                     const mid = canvas.width / 2;
                     const margin = canvas.width * 0.05;
-                    const sides = [{ name: "右段", x: mid - margin, w: mid + margin }, { name: "左段", x: 0, w: mid + margin }];
+                    const sides = [
+                        { name: "右段", x: mid - margin, w: mid + margin },
+                        { name: "左段", x: 0, w: mid + margin }
+                    ];
+
                     let pageText = `--- Page ${i} ---\n`;
                     for (const side of sides) {
                         const sCanvas = document.createElement('canvas');
                         sCanvas.width = side.w; sCanvas.height = canvas.height;
                         sCanvas.getContext('2d').drawImage(canvas, side.x, 0, side.w, canvas.height, 0, 0, side.w, canvas.height);
                         const base64Data = sCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
-                        const prompt = "あなたはプロの校正者です。提示された画像（縦書き文書の{side}）をテキスト化してください。
+                        
+                        const prompt = `あなたは日本語文書の専門家です。提示された画像（日本語・縦書きの${side.name}）を、以下のルールに厳格に従ってテキスト化してください。
+                        1. 改行の整理: 1行ごとの物理的な改行はすべて削除し、一つの意味の通る文章として繋げてください。
+                        2. 段落の維持: 文頭が一文字下がっている箇所や、明確な話題の切り替わりがある箇所のみ、改行（段落分け）を行ってください。
+                        3. ノイズ除去: ページ端の欠けやノイズ、隣の段の文字は無視してください。
+                        4. 出力制限: 書き起こした本文のみを出力し、解説やメタデータは含めないでください。`;
 
-                【最優先ルール】
-                1. 文章を繋げる: 1行の終わりで発生している物理的な改行はすべて削除し、一つの意味の通る文章として繋げてください。
-                2. 段落の維持: 文頭が一文字下がっている箇所や、明らかに話題が変わる箇所のみ、改行（段落分け）を行ってください。
-                3. ゴミの排除: ページ端のノイズや、半分切れている隣の段の文字は完全に無視してください。
-                4. 本文のみ: 解説や挨拶は一切不要です。
-";
                         const result = await model.generateContent([{ inlineData: { data: base64Data, mimeType: "image/jpeg" } }, prompt]);
                         pageText += result.response.text() + "\n";
                         await new Promise(r => setTimeout(r, 800));
@@ -208,7 +209,7 @@
                     resultArea.scrollTop = resultArea.scrollHeight;
                     addLog(`[${i}/${actualEnd}] 完了`, 'success');
                 }
-                addLog("すべて完了しました！", 'success');
+                addLog("すべての処理が完了しました。", 'success');
             } catch (err) { addLog("エラー: " + err.message, 'error'); }
         };
     </script>
