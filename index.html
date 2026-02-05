@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>日本語見開き縦書きPDFを無料枠内のGeminiでOCRする</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://codoc.jp/js/cms.js" data-css="rainbow-square" data-usercode="cFhPkVEVKg" charset="UTF-8" defer></script>
+    
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 20px auto; padding: 20px; background-color: #f5f5f7; color: #1d1d1f; }
         h2 { text-align: center; color: #333; margin-bottom: 30px; font-weight: 700; }
@@ -14,13 +16,6 @@
         .description { font-size: 0.85em; line-height: 1.5; color: #6e6e73; margin-bottom: 8px; font-weight: 400; }
         .description a { color: #0071e3; text-decoration: none; border-bottom: 1px solid rgba(0,113,227,0.3); }
         
-        .comparison-table { width: 100%; border-collapse: collapse; font-size: 0.8em; margin: 10px 0; background: #f9f9fb; }
-        .comparison-table th, .comparison-table td { border: 1px solid #d2d2d7; padding: 8px; text-align: center; }
-        .comparison-table th { background: #f0f0f4; font-weight: 600; }
-
-        .warning-box { background: #fff9e6; border: 1px solid #ffe58f; padding: 12px; border-radius: 8px; font-size: 0.8em; color: #856404; margin: 15px 0; line-height: 1.6; }
-        .safe-info { font-size: 0.8em; color: #86868b; margin-top: 4px; margin-bottom: 12px; display: flex; align-items: flex-start; gap: 4px; line-height: 1.4; }
-
         input, select { width: 100%; padding: 12px; border: 1px solid #d2d2d7; border-radius: 8px; box-sizing: border-box; margin-bottom: 8px; font-size: 14px; background: #fafafa; }
         
         .range-container { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
@@ -29,82 +24,52 @@
         button { background-color: #0071e3; color: white; border: none; padding: 14px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; font-size: 16px; transition: all 0.2s; }
         button:hover { background-color: #0077ed; transform: translateY(-1px); }
         
-        /* コピーボタン専用スタイル */
-        .copy-btn { width: auto; font-size: 13px; padding: 8px 16px; margin-top: 10px; background-color: #34c759; }
-        .copy-btn:hover { background-color: #28a745; }
+        .copy-btn { width: auto; font-size: 13px; padding: 8px 16px; margin-bottom: 10px; background-color: #34c759; }
         .copy-success { font-size: 12px; color: #34c759; margin-left: 10px; font-weight: bold; opacity: 0; transition: opacity 0.3s; }
 
         #log { background: #ffffff; color: #333; padding: 15px; border: 1px solid #d2d2d7; border-radius: 8px; font-family: inherit; height: 120px; overflow-y: auto; font-size: 13px; line-height: 1.6; }
         textarea { width: 100%; height: 500px; border: 1px solid #d2d2d7; border-radius: 8px; padding: 15px; font-size: 15px; line-height: 1.8; box-sizing: border-box; margin-top: 10px; resize: vertical; background-color: #fff; }
         
+        /* 応援エリアのスタイル */
+        .support-card { text-align: center; border: 1px solid #e5e5e7; background-color: #fbfbfd; }
+
         .log-error { color: #ff3b30; font-weight: bold; }
         .log-success { color: #34c759; font-weight: bold; }
+        .warning-box { background: #fff9e6; border: 1px solid #ffe58f; padding: 12px; border-radius: 8px; font-size: 0.8em; color: #856404; margin: 15px 0; line-height: 1.6; }
     </style>
 </head>
 <body>
 
-    <h2>日本語見開き縦書きPDFを無料枠内のGeminiでOCRする</h2>
+    <h2>日本語見開き縦書きPDF OCR (Gemini API)</h2>
 
     <div class="card">
-        <strong class="label">1. 設定（Gemini APIキーとモデル）</strong>
-        <div class="description">
-            🔑 <strong>Gemini APIキーの取得:</strong> <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>で取得可能。
-        </div>
-
-        <input type="password" id="apiKey" placeholder="APIキーを入力">
-        
+        <strong class="label">1. 設定</strong>
+        <input type="password" id="apiKey" placeholder="Gemini APIキーを入力">
         <select id="modelSelect">
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash (推奨: 精度と上限が高い)</option>
-            <option value="gemini-2.0-flash">Gemini 2 Flash (速度優先)</option>
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash (推奨)</option>
+            <option value="gemini-2.0-flash">Gemini 2 Flash</option>
         </select>
-
-        <table class="comparison-table">
-            <thead>
-                <tr>
-                    <th>モデル</th>
-                    <th>1日の処理目安</th>
-                    <th>分間制限</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>2.5 Flash</td>
-                    <td><strong>約5,000枚</strong></td>
-                    <td>1,000回</td>
-                </tr>
-                <tr>
-                    <td>2 Flash</td>
-                    <td><strong>約750枚</strong></td>
-                    <td>2,000回</td>
-                </tr>
-            </tbody>
-        </table>
-
         <button id="saveKeyBtn">設定を保存する</button>
     </div>
 
     <div class="card">
         <strong class="label">2. 実行設定</strong>
         <input type="file" id="pdfFile" accept="application/pdf">
-
         <div class="warning-box">
-            ⚠️ <strong>長文PDFのコツ:</strong> ブラウザのメモリ制限を避けるため、<strong>一度に100ページ程度ずつ</strong>に範囲を絞って処理することをお勧めします。
+            ⚠️ <strong>長文PDFのコツ:</strong> メモリ制限を避けるため、一度に100ページ程度ずつ処理することをお勧めします。
         </div>
-        
-        <div style="margin: 15px 0 5px 0; font-size: 0.9em; font-weight: bold; color: #333;">処理するページ範囲:</div>
         <div class="range-container">
             <input type="number" id="startPage" value="1" min="1">
             <span>ページから</span>
             <input type="number" id="endPage" placeholder="最後" min="1">
             <span>ページまで</span>
         </div>
-        
         <button id="startBtn">OCR処理を開始する</button>
     </div>
 
     <div class="card">
         <strong class="label">3. 進行状況</strong>
-        <div id="log">PDFを選択して開始ボタンを押してください。</div>
+        <div id="log">PDFを選択して開始してください。</div>
     </div>
 
     <div class="card">
@@ -114,6 +79,12 @@
             <span id="copyMsg" class="copy-success">コピー完了！</span>
         </div>
         <textarea id="result" placeholder="ここに結果が表示されます..."></textarea>
+    </div>
+
+    <div class="card support-card">
+        <p class="description">このツールがお役に立ちましたら、応援をいただけるとさらに励みになります！さらに人文社会科学のためのツールを作っていきます！</p>
+        
+        <div id="codoc-entry-3JKCLfl2SA" class="codoc-entries" data-without-body="1" data-support-message="開発を応援する"></div>
     </div>
 
     <script type="module">
@@ -130,16 +101,12 @@
         const copyBtn = document.getElementById('copyBtn');
         const copyMsg = document.getElementById('copyMsg');
 
-        // === コピー機能の追加 ===
+        // コピー機能
         copyBtn.onclick = async () => {
             if (!resultArea.value) return;
-            try {
-                await navigator.clipboard.writeText(resultArea.value);
-                copyMsg.style.opacity = "1";
-                setTimeout(() => { copyMsg.style.opacity = "0"; }, 2000);
-            } catch (err) {
-                alert("コピーに失敗しました: " + err);
-            }
+            await navigator.clipboard.writeText(resultArea.value);
+            copyMsg.style.opacity = "1";
+            setTimeout(() => { copyMsg.style.opacity = "0"; }, 2000);
         };
 
         const addLog = (msg, type = '') => {
@@ -166,35 +133,23 @@
             const selectedModel = modelSelect.value;
 
             if (!file || !key) { alert("PDFとAPIキーが必要です。"); return; }
-
             logArea.innerHTML = "";
             resultArea.value = "";
 
             try {
                 const genAI = new GoogleGenerativeAI(key);
                 const model = genAI.getGenerativeModel({ model: selectedModel });
-
                 const arrayBuffer = await file.arrayBuffer();
                 const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
                 
                 const totalPages = pdf.numPages;
-                const startRange = parseInt(startPageInput.value) || 1;
-                const endRange = parseInt(endPageInput.value) || totalPages;
+                const actualStart = Math.max(1, parseInt(startPageInput.value) || 1);
+                const actualEnd = Math.min(totalPages, parseInt(endPageInput.value) || totalPages);
 
-                const actualStart = Math.max(1, startRange);
-                const actualEnd = Math.min(totalPages, endRange);
-
-                if (actualStart > actualEnd) {
-                    addLog("エラー: 開始ページが終了ページを超えています。", "error");
-                    return;
-                }
-
-                addLog(`PDF解析成功: 全 ${totalPages} ページ`);
-                addLog(`処理範囲: ${actualStart} ～ ${actualEnd} ページ`);
-                addLog(`使用モデル: ${selectedModel}`);
+                addLog(`解析開始: ${actualStart} ～ ${actualEnd} / 全 ${totalPages} ページ`);
 
                 for (let i = actualStart; i <= actualEnd; i++) {
-                    addLog(`[${i}/${actualEnd}] ページを解析中...`);
+                    addLog(`[${i}/${actualEnd}] 処理中...`);
                     const page = await pdf.getPage(i);
                     const viewport = page.getViewport({scale: 2.5});
                     const canvas = document.createElement('canvas');
@@ -211,38 +166,26 @@
                     ];
 
                     let pageText = `--- Page ${i} ---\n`;
-
                     for (const side of sides) {
                         const sCanvas = document.createElement('canvas');
                         sCanvas.width = side.w; sCanvas.height = canvas.height;
                         sCanvas.getContext('2d').drawImage(canvas, side.x, 0, side.w, canvas.height, 0, 0, side.w, canvas.height);
                         const base64Data = sCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
                         
-                        const prompt = `あなたはプロの校正者です。この画像（縦書きで一段組、または二段組の${side.name}）を正確に書き起こしてください。
-                        【最優先ルール】
-                        1. 文章を繋げる: 1行の終わりで発生している物理的な改行はすべて削除し、一つの意味の通る文章として繋げてください。
-                        2. 段落の維持: 文頭が一文字下がっている箇所や、明らかに話題が変わる箇所のみ、改行（段落分け）を行ってください。
-                        3. ゴミの排除: ページ端のノイズや、半分切れている隣の段の文字は完全に無視してください。
-                        4. 本文のみ: 解説や挨拶は一切不要です。`;
+                        const prompt = `あなたはプロの校正者です。この画像（縦書きの${side.name}）をテキスト化してください。改行を整理し、文章を繋げ、ノイズは無視してください。本文のみ出力してください。`;
 
-                        const result = await model.generateContent([
-                            { inlineData: { data: base64Data, mimeType: "image/jpeg" } },
-                            prompt
-                        ]);
-
+                        const result = await model.generateContent([{ inlineData: { data: base64Data, mimeType: "image/jpeg" } }, prompt]);
                         pageText += result.response.text() + "\n";
-                        await new Promise(r => setTimeout(r, 600));
+                        await new Promise(r => setTimeout(r, 800)); // レート制限回避
                     }
 
                     resultArea.value += pageText + "\n";
                     resultArea.scrollTop = resultArea.scrollHeight;
                     addLog(`[${i}/${actualEnd}] 完了`, 'success');
                 }
-                addLog("指定範囲の処理がすべて完了しました。", 'success');
-
+                addLog("すべて完了しました！", 'success');
             } catch (err) {
                 addLog("エラー: " + err.message, 'error');
-                console.error(err);
             }
         };
     </script>
