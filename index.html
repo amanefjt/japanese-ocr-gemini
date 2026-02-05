@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>日本語見開き縦書きPDFをGeminiでOCRする</title>
+    <title>日本語見開き縦書きPDFを無料枠内のGeminiでOCRする</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 20px auto; padding: 20px; background-color: #f5f5f7; color: #1d1d1f; }
@@ -14,7 +14,6 @@
         .description { font-size: 0.85em; line-height: 1.5; color: #6e6e73; margin-bottom: 8px; font-weight: 400; }
         .description a { color: #0071e3; text-decoration: none; border-bottom: 1px solid rgba(0,113,227,0.3); }
         
-        /* 比較テーブルのスタイル */
         .comparison-table { width: 100%; border-collapse: collapse; font-size: 0.8em; margin: 10px 0; background: #f9f9fb; }
         .comparison-table th, .comparison-table td { border: 1px solid #d2d2d7; padding: 8px; text-align: center; }
         .comparison-table th { background: #f0f0f4; font-weight: 600; }
@@ -22,8 +21,6 @@
         .safe-info { font-size: 0.8em; color: #86868b; margin-top: 4px; margin-bottom: 12px; display: flex; align-items: flex-start; gap: 4px; line-height: 1.4; }
 
         input, select { width: 100%; padding: 12px; border: 1px solid #d2d2d7; border-radius: 8px; box-sizing: border-box; margin-bottom: 8px; font-size: 14px; background: #fafafa; }
-        input:focus, select:focus { outline: none; border-color: #0071e3; background: #fff; }
-
         button { background-color: #0071e3; color: white; border: none; padding: 14px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; font-size: 16px; transition: all 0.2s; }
         button:hover { background-color: #0077ed; transform: translateY(-1px); }
         
@@ -36,55 +33,48 @@
 </head>
 <body>
 
-    <h2>日本語見開き縦書きをGeminiでOCRする</h2>
+    <h2>日本語見開き縦書きPDFを無料枠内のGeminiでOCRする</h2>
 
     <div class="card">
-        <strong class="label">1. 設定（APIキーとモデル）</strong>
-        
+        <strong class="label">1. 設定（Gemini APIキーとモデル）</strong>
         <div class="description">
-            🔑 <strong>Gemini APIキーの取得:</strong> 
-            <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>で取得できます。無料の範囲であっても、APIを使用するには支払い情報を登録する必要があります。
+            🔑 <strong>Gemini APIキーの取得:</strong> <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>で取得可能。なお、無料枠での利用にも支払い情報の登録が必要です。
         </div>
 
         <input type="password" id="apiKey" placeholder="APIキーを入力">
         
-        <strong class="label" style="font-size: 0.9em; margin-top: 15px;">使用するモデルを選択</strong>
         <select id="modelSelect">
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash (推奨: 精度と上限が高い)</option>
             <option value="gemini-2.0-flash">Gemini 2 Flash (速度優先)</option>
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash (精度優先)</option>
         </select>
 
-       <table class="comparison-table">
+        <table class="comparison-table">
             <thead>
                 <tr>
                     <th>モデル</th>
-                    <th>特徴</th>
                     <th>1日の処理目安</th>
-                    <th>分間制限(RPM)</th>
+                    <th>分間制限</th>
+                    <th>特徴</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
-                    <td>2 Flash</td>
-                    <td>爆速・大量処理向き</td>
-                    <td><strong>約750ページ</strong></td>
-                    <td>2,000回</td>
+                    <td>2.5 Flash</td>
+                    <td><strong>約5,000枚</strong></td>
+                    <td>1,000回</td>
+                    <td>高精度・複雑な紙面</td>
                 </tr>
                 <tr>
-                    <td>2.5 Flash</td>
-                    <td>高精度・複雑な紙面向き</td>
-                    <td><strong>約5,000ページ</strong></td>
-                    <td>1,000回</td>
+                    <td>2 Flash</td>
+                    <td><strong>約750枚</strong></td>
+                    <td>2,000回</td>
+                    <td>爆速・大量処理</td>
                 </tr>
             </tbody>
         </table>
-        <div class="description" style="font-size: 0.75em; margin-top: 5px;">
-            ※見開き1ページを左右に分割して解析するため、1ページにつき2リクエストを消費します。<br>
-            ※Gemini 2.5 Flashの方が1日の上限（RPD）が緩和されているため、より多くのページを処理可能です。
-        </div>
 
         <div class="safe-info">
-            🛡️ <span><strong>安全性とデータ:</strong> キーはブラウザにのみ保存されます。無料枠では入力内容がモデル改善に利用される場合があります。</span>
+            🛡️ <span><strong>安全性とデータ:</strong> キーはブラウザに保存され、作者には送信されません。無料枠では入力内容が学習に利用される場合があります。</span>
         </div>
 
         <button id="saveKeyBtn">設定を保存する</button>
@@ -125,14 +115,13 @@
             logArea.scrollTop = logArea.scrollHeight;
         };
 
-        // 初期値読み込み
         apiKeyInput.value = localStorage.getItem('gemini_api_key') || "";
-        modelSelect.value = localStorage.getItem('gemini_model_choice') || "gemini-2.0-flash";
+        modelSelect.value = localStorage.getItem('gemini_model_choice') || "gemini-2.5-flash";
 
         document.getElementById('saveKeyBtn').onclick = () => {
             localStorage.setItem('gemini_api_key', apiKeyInput.value);
             localStorage.setItem('gemini_model_choice', modelSelect.value);
-            alert("設定をブラウザに保存しました。");
+            alert("設定を保存しました。");
         };
 
         document.getElementById('startBtn').onclick = async () => {
@@ -140,10 +129,7 @@
             const key = apiKeyInput.value;
             const selectedModel = modelSelect.value;
 
-            if (!file || !key) {
-                alert("PDFファイルとAPIキーの両方が必要です。");
-                return;
-            }
+            if (!file || !key) { alert("PDFとAPIキーが必要です。"); return; }
 
             logArea.innerHTML = "";
             addLog(`使用モデル: ${selectedModel}`);
@@ -156,11 +142,12 @@
 
                 const arrayBuffer = await file.arrayBuffer();
                 const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
-                addLog(`PDF読み込み成功: 全 ${pdf.numPages} ページ`);
+                addLog(`PDF解析成功: 全 ${pdf.numPages} ページ`);
 
                 for (let i = 1; i <= pdf.numPages; i++) {
                     addLog(`[${i}/${pdf.numPages}] ページを解析中...`);
                     const page = await pdf.getPage(i);
+                    // より確実な viewport 取得方法
                     const viewport = page.getViewport({scale: 2.5});
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
@@ -181,7 +168,6 @@
                         const sCanvas = document.createElement('canvas');
                         sCanvas.width = side.w; sCanvas.height = canvas.height;
                         sCanvas.getContext('2d').drawImage(canvas, side.x, 0, side.w, canvas.height, 0, 0, side.w, canvas.height);
-                        
                         const base64Data = sCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
                         
                         const prompt = `あなたはプロの編集者です。この画像（縦書きで一段組、または二段組の${side.name}）を正確に書き起こしてください。物理的な行末の改行は繋げ、意味的な段落（一文字下げ等）の区切りだけ改行してください。本文のみ出力してください。`;
@@ -192,20 +178,19 @@
                         ]);
 
                         pageText += result.response.text() + "\n";
+                        
+                        // 1リクエストごとに安全な待機時間を確保
+                        await new Promise(r => setTimeout(r, 600));
                     }
 
                     resultArea.value += pageText + "\n";
                     resultArea.scrollTop = resultArea.scrollHeight;
                     addLog(`[${i}/${pdf.numPages}] 完了`, 'success');
-
-                    // 1リクエストごとに2秒待機（レート制限対策）
-                    await new Promise(r => setTimeout(r, 2000));
                 }
-                addLog("すべての処理が完了しました。", 'success');
+                addLog("すべて完了しました。", 'success');
 
             } catch (err) {
-                addLog("エラーが発生しました: " + err.message, 'error');
-                console.error(err);
+                addLog("エラー: " + err.message, 'error');
             }
         };
     </script>
