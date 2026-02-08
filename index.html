@@ -480,11 +480,11 @@
                             } catch (err) {
                                 const msg = err.message || "";
                                 if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
-                                    const waitSec = 30 * (attempt + 1);
+                                    const waitSec = 5 * (attempt + 1);
                                     addLog(`  [!] API制限（429）が発生しました。${waitSec}秒待機して再試行します (${attempt + 1}/${maxRetries})`, 'retry');
                                     await new Promise(r => setTimeout(r, waitSec * 1000));
                                 } else if (msg.includes("503") || msg.includes("UNAVAILABLE")) {
-                                    const waitSec = 10 * (attempt + 1);
+                                    const waitSec = 5 * (attempt + 1);
                                     addLog(`  [!] サーバーが一時的に混雑しています。${waitSec}秒待機して再試行します (${attempt + 1}/${maxRetries})`, 'retry');
                                     await new Promise(r => setTimeout(r, waitSec * 1000));
                                 } else if (msg.includes("API_KEY_INVALID") || msg.includes("key is invalid")) {
@@ -496,7 +496,7 @@
                                 }
                             }
                         }
-                        await new Promise(r => setTimeout(r, 1000));
+                        await new Promise(r => setTimeout(r, 100));
                     }
                     resultArea.value += pageText + "\n";
                     resultArea.scrollTop = resultArea.scrollHeight;
