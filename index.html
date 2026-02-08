@@ -1,76 +1,4 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>高精度OCRツール：見開き・重複自動処理版</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-    
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 900px; margin: 20px auto; padding: 20px; background-color: #f5f5f7; color: #1d1d1f; }
-        h2 { text-align: center; color: #333; margin-bottom: 30px; font-weight: 700; }
-        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; position: relative; }
-        strong.label { display: block; margin-bottom: 12px; color: #0071e3; font-size: 1.1em; }
-        
-        .important-note { font-size: 0.85em; color: #1d1d1f; background: #ffffff; padding: 15px; border-radius: 8px; margin: 15px 0; border: 1px solid #d2d2d7; line-height: 1.6; }
-        .important-note a { color: #0071e3; text-decoration: underline; font-weight: bold; }
-
-        input, select { width: 100%; padding: 12px; border: 1px solid #d2d2d7; border-radius: 8px; box-sizing: border-box; margin-bottom: 8px; font-size: 14px; background: #fafafa; }
-        .range-container { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
-        .range-container input { width: 80px; margin-bottom: 0; text-align: center; }
-
-        button { background-color: #0071e3; color: white; border: none; padding: 14px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; font-size: 16px; transition: 0.2s; }
-        button:hover { background-color: #0077ed; transform: translateY(-1px); }
-        
-        #log { background: #ffffff; color: #333; padding: 15px; border: 1px solid #d2d2d7; border-radius: 8px; height: 150px; overflow-y: auto; font-size: 13px; line-height: 1.6; }
-        
-        textarea { width: 100%; height: 500px; border: 1px solid #d2d2d7; border-radius: 8px; padding: 15px; font-size: 15px; line-height: 1.8; margin-top: 10px; resize: vertical; box-sizing: border-box; display: block; }
-        
-        .copy-btn { width: auto; font-size: 13px; padding: 8px 16px; margin-bottom: 10px; background-color: #34c759; }
-        .log-error { color: #ff3b30; font-weight: bold; }
-        .log-retry { color: #f5a623; font-weight: bold; }
-        .log-success { color: #34c759; font-weight: bold; }
-        footer { text-align: center; margin-top: 40px; padding: 20px; font-size: 0.8em; color: #86868b; }
-    </style>
-</head>
-<body>
-
-    <h2>日本語書籍 高精度OCR</h2>
-
-    <div class="card">
-        <strong class="label">1. 設定</strong>
-        <input type="password" id="apiKey" placeholder="Gemini APIキーを入力">
-        <select id="modelSelect">
-            <option value="gemini-2.0-flash">Gemini 2.0 Flash (高速・推奨)</option>
-            <option value="gemini-1.5-pro">Gemini 1.5 Pro (最高精度)</option>
-        </select>
-        <button id="saveKeyBtn">設定を保存</button>
-    </div>
-
-    <div class="card">
-        <strong class="label">2. 実行設定</strong>
-        <input type="file" id="pdfFile" accept="application/pdf">
-        <div class="range-container">
-            <input type="number" id="startPage" value="1" min="1">
-            <span>ページから</span>
-            <input type="number" id="endPage" placeholder="最後" min="1">
-            <span>ページまで</span>
-        </div>
-        <button id="startBtn">OCR処理を開始（自動レイアウト判定付）</button>
-    </div>
-
-    <div class="card">
-        <strong class="label">3. 進行状況</strong>
-        <div id="log">PDFを選択して開始してください。</div>
-    </div>
-
-    <div class="card">
-        <strong class="label">4. 結果</strong>
-        <button id="copyBtn" class="copy-btn">📋 結果をコピー</button>
-        <textarea id="result" placeholder="ここにテキストが表示されます..."></textarea>
-    </div>
-
-    <script type="module">
+<script type="module">
         import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
@@ -80,8 +8,9 @@
         const modelSelect = document.getElementById('modelSelect');
         const startPageInput = document.getElementById('startPage');
         const endPageInput = document.getElementById('endPage');
+        const copyBtn = document.getElementById('copyBtn');
+        const copyMsg = document.getElementById('copyMsg');
 
-        // 設定の読み込み
         apiKeyInput.value = localStorage.getItem('gemini_api_key') || "";
         modelSelect.value = localStorage.getItem('gemini_model_choice') || "gemini-2.0-flash";
 
@@ -89,6 +18,13 @@
             localStorage.setItem('gemini_api_key', apiKeyInput.value);
             localStorage.setItem('gemini_model_choice', modelSelect.value);
             alert("設定を保存しました。");
+        };
+
+        copyBtn.onclick = async () => {
+            if (!resultArea.value) return;
+            await navigator.clipboard.writeText(resultArea.value);
+            copyMsg.style.opacity = "1";
+            setTimeout(() => { copyMsg.style.opacity = "0"; }, 2000);
         };
 
         const addLog = (msg, type = '') => {
@@ -104,6 +40,7 @@
         document.getElementById('startBtn').onclick = async () => {
             const file = document.getElementById('pdfFile').files[0];
             const key = apiKeyInput.value;
+            const selectedModel = modelSelect.value;
             if (!file || !key) { alert("PDFとAPIキーが必要です。"); return; }
             
             logArea.innerHTML = "";
@@ -111,7 +48,7 @@
 
             try {
                 const genAI = new GoogleGenerativeAI(key);
-                const model = genAI.getGenerativeModel({ model: modelSelect.value });
+                const model = genAI.getGenerativeModel({ model: selectedModel });
                 const arrayBuffer = await file.arrayBuffer();
                 const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
                 
@@ -119,56 +56,53 @@
                 const actualEnd = Math.min(pdf.numPages, parseInt(endPageInput.value) || pdf.numPages);
 
                 for (let i = actualStart; i <= actualEnd; i++) {
-                    addLog(`[${i}/${actualEnd}] 解析中...`);
+                    addLog(`[${i}/${actualEnd}] レイアウト解析中...`);
                     const page = await pdf.getPage(i);
-                    const viewport = page.getViewport({scale: 3.0}); // 高解像度でレンダリング
+                    const viewport = page.getViewport({scale: 2.5});
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
                     canvas.height = viewport.height;
                     canvas.width = viewport.width;
                     await page.render({canvasContext: ctx, viewport: viewport}).promise;
 
-                    // 1. レイアウト判定
-                    const fullPageB64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+                    // 1. レイアウト判定用の画像生成（ページ全体）
+                    const fullPageBase64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+                    
                     let layoutType = "SINGLE";
                     try {
-                        const layoutCheck = await model.generateContent([
-                            { inlineData: { data: fullPageB64, mimeType: "image/jpeg" } },
-                            "この画像は「一段組（1ページ構成）」ですか？それとも「二段組（見開き）」ですか？ 'SINGLE' または 'DOUBLE' とだけ返してください。"
-                        ]);
-                        layoutType = layoutCheck.response.text().toUpperCase();
-                    } catch (e) { addLog("  判定エラー、一段組として処理します", 'retry'); }
+                        const layoutPrompt = "この画像は「一段組（1ページ1面）」ですか、それとも「二段組（見開き）」ですか？ 'SINGLE' または 'DOUBLE' とだけ回答してください。";
+                        const layoutResult = await model.generateContent([{ inlineData: { data: fullPageBase64, mimeType: "image/jpeg" } }, layoutPrompt]);
+                        layoutType = layoutResult.response.text().toUpperCase();
+                    } catch (e) {
+                        addLog(`  [!] レイアウト判定失敗。一段組として続行します。`, 'retry');
+                    }
 
-                    // 2. OCR用コンテンツの作成
-                    let contents = [];
-                    let prompt = "";
-
+                    // 2. 判定結果に基づいて分割設定を決定
+                    let sides = [];
                     if (layoutType.includes("DOUBLE")) {
-                        addLog(`  -> 二段組判定：左右に分割して重複を除去します。`);
+                        addLog(`  -> 二段組として左右分割して処理します。`);
                         const mid = canvas.width / 2;
-                        const margin = Math.floor(canvas.width * 0.06); // 少し広めにのりしろを取る
-
-                        const rCanvas = document.createElement('canvas');
-                        rCanvas.width = canvas.width - (mid - margin); rCanvas.height = canvas.height;
-                        rCanvas.getContext('2d').drawImage(canvas, mid - margin, 0, rCanvas.width, canvas.height, 0, 0, rCanvas.width, canvas.height);
-                        
-                        const lCanvas = document.createElement('canvas');
-                        lCanvas.width = mid + margin; lCanvas.height = canvas.height;
-                        lCanvas.getContext('2d').drawImage(canvas, 0, 0, lCanvas.width, canvas.height, 0, 0, lCanvas.width, canvas.height);
-
-                        contents.push({ inlineData: { data: rCanvas.toDataURL('image/jpeg', 0.8).split(',')[1], mimeType: "image/jpeg" } });
-                        contents.push({ inlineData: { data: lCanvas.toDataURL('image/jpeg', 0.8).split(',')[1], mimeType: "image/jpeg" } });
-                        
-                        prompt = `指示：提示された2枚の画像は書籍の見開き（右ページと左ページ）です。中央部が重複しています。
-                        1. 右から左へと続く一本の文章としてテキスト化してください。
-                        2. 【最重要】中央の重複部分は、文脈を判断して二重に出力せず、自然に繋げてください。
-                        3. 物理的な改行は除去し、意味的な段落のみで改行してください。
-                        4. 柱、ノンブル、ノイズは除外してください。
-                        5. 出力はテキストのみ。`;
+                        const margin = Math.floor(canvas.width * 0.05); 
+                        sides = [
+                            { name: "右側", x: mid - margin, w: canvas.width - (mid - margin) },
+                            { name: "左側", x: 0, w: mid + margin }
+                        ];
                     } else {
-                        addLog(`  -> 一段組判定：全体をそのまま処理します。`);
-                        contents.push({ inlineData: { data: fullPageB64, mimeType: "image/jpeg" } });
-                        prompt = "指示：日本語書籍（縦書き）の超高精度テキスト化と論理構造の再構築
+                        addLog(`  -> 一段組として全体を処理します。`);
+                        sides = [
+                            { name: "全体", x: 0, w: canvas.width }
+                        ];
+                    }
+
+                    // 3. 各パーツ（または全体）のOCR実行
+                    let pageText = `--- Page ${i} ---\n`;
+                    for (const side of sides) {
+                        const sCanvas = document.createElement('canvas');
+                        sCanvas.width = side.w; sCanvas.height = canvas.height;
+                        sCanvas.getContext('2d').drawImage(canvas, side.x, 0, side.w, canvas.height, 0, 0, side.w, canvas.height);
+                        const base64Data = sCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+                        
+                        const prompt = `指示：日本語書籍（縦書き）の超高精度テキスト化と論理構造の再構築
 
 1. 役割
 あなたは、国立国会図書館のデジタルアーカイブ化プロジェクトに従事する、世界最高峰のデータ入力エキスパートです。提示された画像（スキャンされた日本語の縦書き・見開き書籍）を読み取り、**書籍の物理的な行区切りではなく、著者が意図した論理的な文章構造として**テキスト化してください。
@@ -185,38 +119,39 @@
 * **不要な空白の削除**: 文字間の不自然なスペースはすべて削除し、詰めて記述してください。
 
 4. 出力形式
-出力は純粋なtext形式とし、挨拶や解説は一切含めないでください。";
-                    }
+出力は純粋なtext形式とし、挨拶や解説は一切含めないでください。`;
 
-                    // 3. 実行（リトライ付）
-                    let success = false;
-                    for (let attempt = 0; attempt < 3; attempt++) {
-                        try {
-                            const result = await model.generateContent([...contents, prompt]);
-                            const text = result.response.text();
-                            resultArea.value += `--- Page ${i} ---\n${text}\n\n`;
-                            resultArea.scrollTop = resultArea.scrollHeight;
-                            success = true;
-                            break;
-                        } catch (err) {
-                            addLog(`  [!] エラー発生、再試行中... (${attempt+1}/3)`, 'retry');
-                            await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+                        let success = false;
+                        let maxRetries = 3;
+                        for (let attempt = 0; attempt < maxRetries; attempt++) {
+                            try {
+                                const result = await model.generateContent([{ inlineData: { data: base64Data, mimeType: "image/jpeg" } }, prompt]);
+                                const text = result.response.text();
+                                if (text) {
+                                    pageText += text + "\n";
+                                    success = true;
+                                    break;
+                                }
+                            } catch (err) {
+                                const msg = err.message || "";
+                                if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("503")) {
+                                    const waitSec = 30 * (attempt + 1);
+                                    addLog(`  [!] ${side.name}: 制限中... ${waitSec}秒待機 (${attempt + 1}/${maxRetries})`, 'retry');
+                                    await new Promise(r => setTimeout(r, waitSec * 1000));
+                                } else {
+                                    addLog(`  [x] ${side.name}でエラー: ${msg.substring(0, 50)}`, 'error');
+                                    break;
+                                }
+                            }
                         }
+                        // API負荷軽減のための微小な待機
+                        await new Promise(r => setTimeout(r, 800));
                     }
-                    if (!success) addLog(`  [x] ページ ${i} の処理に失敗しました`, 'error');
-                    
+                    resultArea.value += pageText + "\n";
+                    resultArea.scrollTop = resultArea.scrollHeight;
                     addLog(`[${i}/${actualEnd}] 完了`, 'success');
-                    await new Promise(r => setTimeout(r, 1200)); // 負荷軽減
                 }
-                addLog("全工程が完了しました！", 'success');
-            } catch (err) { addLog("エラー: " + err.message, 'error'); }
-        };
-
-        document.getElementById('copyBtn').onclick = () => {
-            resultArea.select();
-            document.execCommand('copy');
-            alert("コピーしました");
+                addLog("すべての処理が完了しました。", 'success');
+            } catch (err) { addLog("重大なエラー: " + err.message, 'error'); }
         };
     </script>
-</body>
-</html>
