@@ -267,13 +267,13 @@
             ⚠️ メモリ制限を避けるため、一度に100ページ程度ずつの処理をお勧めします。
         </div>
 
-        <strong class="label" style="font-size: 0.9em; margin-top: 15px;">レイアウト設定</strong>
+        <strong class="label" style="font-size: 0.9em; margin-top: 15px;">文書のレイアウト</strong>
         <div style="margin-bottom: 15px;">
             <label style="margin-right: 15px;">
-                <input type="radio" name="layout" value="double" checked style="width: auto;"> 見開き（自動分割）
+                <input type="radio" name="layout" value="two-column" checked style="width: auto;"> 二段組（自動分割）
             </label>
             <label>
-                <input type="radio" name="layout" value="single" style="width: auto;"> 単ページ（分割なし）
+                <input type="radio" name="layout" value="one-column" style="width: auto;"> 一段組（分割なし）
             </label>
         </div>
 
@@ -434,8 +434,9 @@
 
                     let imagesToProcess = [];
 
-                    if (layout === 'double') {
-                        // === 見開き分割ロジック ===
+                    if (layout === 'two-column') {
+                        // === 二段組（分割あり） ===
+                        // ノド元で左右が繋がってしまうのを防ぐため、物理的に分割して処理する
                         const mid = canvas.width / 2;
                         const margin = Math.floor(canvas.width * 0.05);
 
@@ -455,9 +456,10 @@
                         imagesToProcess.push({ name: "左側", base64: sCanvasLeft.toDataURL('image/jpeg', 0.8).split(',')[1] });
 
                     } else {
-                        // === 単ページロジック ===
+                        // === 一段組（分割なし） ===
+                        // 文脈がつながりやすいため、見開き全体を一度に渡す
                         const base64Data = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
-                        imagesToProcess.push({ name: "全体", base64: base64Data });
+                        imagesToProcess.push({ name: "見開き全体", base64: base64Data });
                     }
 
                     let pageText = `--- Page ${i} ---\n`;
