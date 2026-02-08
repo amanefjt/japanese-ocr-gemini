@@ -24,37 +24,6 @@
             font-weight: 700;
         }
 
-<<<<<<< HEAD
-        button { background-color: #0071e3; color: white; border: none; padding: 14px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; font-size: 16px; transition: 0.2s; }
-        button:hover { background-color: #0077ed; transform: translateY(-1px); }
-        
-        /* 4. 書き起こし結果 のレイアウト調整 */
-        .result-header { display: flex; align-items: center; justify-content: flex-start; gap: 15px; margin-bottom: 5px; }
-        .copy-btn { width: auto; font-size: 13px; padding: 8px 16px; margin-bottom: 10px; background-color: #34c759; }
-        .copy-success { font-size: 12px; color: #34c759; margin-left: 10px; font-weight: bold; opacity: 0; transition: 0.3s; }
-
-        #log { background: #ffffff; color: #333; padding: 15px; border: 1px solid #d2d2d7; border-radius: 8px; height: 120px; overflow-y: auto; font-size: 13px; line-height: 1.6; }
-        
-        /* ボックスはみ出し防止修正 */
-        textarea { 
-            width: 100%; 
-            height: 500px; 
-            border: 1px solid #d2d2d7; 
-            border-radius: 8px; 
-            padding: 15px; 
-            font-size: 15px; 
-            line-height: 1.8; 
-            margin-top: 10px; 
-            resize: vertical; 
-            box-sizing: border-box; 
-            display: block; 
-        }
-        
-        .warning-box { background: #fffdf5; border: 1px solid #f0e6cc; padding: 8px 12px; border-radius: 6px; font-size: 0.75em; color: #665c3d; margin: 10px 0; }
-        .log-error { color: #ff3b30; font-weight: bold; }
-        .log-retry { color: #f5a623; font-weight: bold; }
-        .log-success { color: #34c759; font-weight: bold; }
-=======
         .card {
             background: white;
             padding: 25px;
@@ -70,7 +39,6 @@
             color: #0071e3;
             font-size: 1.1em;
         }
->>>>>>> c79925a (feat: Add layout toggle, editable prompt, and custom model options)
 
         .important-note {
             font-size: 0.85em;
@@ -152,6 +120,15 @@
             transform: translateY(-1px);
         }
 
+        /* 4. 書き起こし結果 のレイアウト調整 */
+        .result-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            margin-bottom: 5px;
+        }
+
         .copy-btn {
             width: auto;
             font-size: 13px;
@@ -181,6 +158,7 @@
             line-height: 1.6;
         }
 
+        /* ボックスはみ出し防止修正 */
         textarea {
             width: 100%;
             height: 500px;
@@ -191,6 +169,8 @@
             line-height: 1.8;
             margin-top: 10px;
             resize: vertical;
+            box-sizing: border-box;
+            display: block;
         }
 
         .warning-box {
@@ -307,30 +287,13 @@
     </div>
 
     <div class="card">
-        <strong class="label">3. プロンプト設定</strong>
-        <div class="important-note" style="margin-top: 5px;">
-            認識精度を調整したい場合、ここを編集してください。
-        </div>
-        <textarea id="promptArea" style="height: 200px; font-size: 14px;"></textarea>
-        <div style="display: flex; gap: 10px; margin-top: 10px;">
-            <button id="savePromptBtn" style="background-color: #34c759;">設定を保存</button>
-            <button id="resetPromptBtn" style="background-color: #86868b;">初期値に戻す</button>
-        </div>
-    </div>
-
-    <div class="card">
-        <strong class="label">4. 進行状況</strong>
+        <strong class="label">3. 進行状況</strong>
         <div id="log">PDFを選択して開始してください。</div>
     </div>
 
     <div class="card">
-<<<<<<< HEAD
         <strong class="label">4. 書き起こし結果</strong>
         <div class="result-header">
-=======
-        <strong class="label">5. 書き起こし結果</strong>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
->>>>>>> c79925a (feat: Add layout toggle, editable prompt, and custom model options)
             <button id="copyBtn" class="copy-btn">📋 全てコピーする</button>
             <span id="copyMsg" class="copy-success">コピー完了！</span>
         </div>
@@ -338,11 +301,7 @@
     </div>
 
     <footer>
-<<<<<<< HEAD
         人文社会科学系のためのデジタルツール
-=======
-
->>>>>>> c79925a (feat: Add layout toggle, editable prompt, and custom model options)
     </footer>
 
     <script type="module">
@@ -400,6 +359,29 @@
             logArea.scrollTop = logArea.scrollHeight;
         };
 
+        // High Precision Prompt (Hardcoded)
+        const OCR_PROMPT = `指示：日本語書籍（縦書き・見開き）の超高精度テキスト化
+
+1. 役割
+あなたは、国立国会図書館のデジタルアーカイブ化プロジェクトに従事する、世界最高峰のデータ入力エキスパートです。提示された画像（スキャンされた日本語の縦書き・見開きの{side}部分）を、一文字の妥協もなく、元の文章のレイアウトを完全に維持した状態でテキスト化してください。
+
+2. ドキュメント構造の理解
+* **見開き処理**: 画像は左右二ページで構成されています。まず右ページを、次に左ページを処理してください。
+* **二段組の処理**: 二段組の場合は、右側のブロックを完全に読み終えてから左側のブロックへ移動してください。
+* **重複の排除（重要）**: 見開き画像の分割処理において、中央部分（ノド）付近の文章が左右の画像で重複している場合があります。この場合、重複部分を検出し、**一度だけ**出力するようにしてください（二重に出力しないこと）。
+* **文章の連結（最重要）**: 書籍上の物理的な改行位置では**絶対に改行コードを入れないでください**。行末と次行の行頭は、間にスペースを入れずに連結し、一つの文として続けてください。
+* **段落の扱い**: 改行を行うのは、**「段落が変わる箇所（通常、文頭が一字下がっている箇所）」**および「見出し」の前後のみとしてください。
+
+3. 具体的な処理規則
+* **文字認識**: 常用漢字、旧字体、ひらがな、カタカナ、句読点を正確に識別してください。
+* **ノイズの除去**: ページ番号（ノンブル）、ヘッダー（柱）、フッターは本文の文脈を分断するため、**出力から完全に除外してください**。
+* **推論による補完**: スキャンの歪みや綴じ部分の影で文字が不鮮明な場合や明らかなOCRエラーは、前後の文脈から日本語として最も自然な文字を推論して埋めてください。
+* **ルビ・図表**: 本文の自然な流れを阻害しないよう、ルビや図表内の文字は読み飛ばしてください。
+* **不要な空白の削除**: 文字間の不自然なスペースはすべて削除し、詰めて記述してください。
+
+4. 出力形式
+出力は純粋なMarkdown形式とし、挨拶や解説は一切含めないでください。`;
+
         document.getElementById('startBtn').onclick = async (e) => {
             const startBtn = e.target;
             const file = document.getElementById('pdfFile').files[0];
@@ -439,8 +421,6 @@
 
                 // Get Layout Setting
                 const layout = document.querySelector('input[name="layout"]:checked').value;
-                // Get Prompt
-                const userPrompt = document.getElementById('promptArea').value;
 
                 for (let i = actualStart; i <= actualEnd; i++) {
                     addLog(`[${i}/${actualEnd}] ページ処理中...`);
@@ -450,46 +430,6 @@
                     const ctx = canvas.getContext('2d');
                     canvas.height = viewport.height;
                     canvas.width = viewport.width;
-<<<<<<< HEAD
-                    await page.render({canvasContext: ctx, viewport: viewport}).promise;
-                    
-                    const mid = canvas.width / 2;
-                    const margin = Math.floor(canvas.width * 0.05); 
-                    
-                    const sides = [
-                        { name: "右側", x: mid - margin, w: canvas.width - (mid - margin) },
-                        { name: "左側", x: 0, w: mid + margin }
-                    ];
-
-                    let pageText = `--- Page ${i} ---\n`;
-                    for (const side of sides) {
-                        const sCanvas = document.createElement('canvas');
-                        sCanvas.width = side.w; sCanvas.height = canvas.height;
-                        sCanvas.getContext('2d').drawImage(canvas, side.x, 0, side.w, canvas.height, 0, 0, side.w, canvas.height);
-                        const base64Data = sCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
-                        
-                        // 高精度プロンプトへの差し替え
-                        const prompt = `指示：日本語書籍（縦書き・見開き）の超高精度テキスト化
-
-1. 役割
-あなたは、国立国会図書館のデジタルアーカイブ化プロジェクトに従事する、世界最高峰のデータ入力エキスパートです。提示された画像（スキャンされた日本語の縦書き・見開きの${side.name}部分）を、一文字の妥協もなく、元の文章のレイアウトを完全に維持した状態でテキスト化してください。
-
-2. ドキュメント構造の理解
-* **見開き処理**: 画像は左右二ページで構成されています。まず右ページを、次に左ページを処理してください。
-* **二段組の処理**: 二段組の場合は、右側のブロックを完全に読み終えてから左側のブロックへ移動してください。
-* **文章の連結（最重要）**: 書籍上の物理的な改行位置では**絶対に改行コードを入れないでください**。行末と次行の行頭は、間にスペースを入れずに連結し、一つの文として続けてください。
-* **段落の扱い**: 改行を行うのは、**「段落が変わる箇所（通常、文頭が一字下がっている箇所）」**および「見出し」の前後のみとしてください。
-
-3. 具体的な処理規則
-* **文字認識**: 常用漢字、旧字体、ひらがな、カタカナ、句読点を正確に識別してください。
-* **ノイズの除去**: ページ番号（ノンブル）、ヘッダー（柱）、フッターは本文の文脈を分断するため、**出力から完全に除外してください**。
-* **推論による補完**: スキャンの歪みや綴じ部分の影で文字が不鮮明な場合や明らかなOCRエラーは、前後の文脈から日本語として最も自然な文字を推論して埋めてください。
-* **ルビ・図表**: 本文の自然な流れを阻害しないよう、ルビや図表内の文字は読み飛ばしてください。
-
-4. 出力形式
-出力は純粋なtext形式とし、挨拶や解説は一切含めないでください。`;
-
-=======
                     await page.render({ canvasContext: ctx, viewport: viewport }).promise;
 
                     let imagesToProcess = [];
@@ -520,15 +460,13 @@
                         imagesToProcess.push({ name: "全体", base64: base64Data });
                     }
 
-
                     let pageText = `--- Page ${i} ---\n`;
                     for (const imgData of imagesToProcess) {
 
-                        // Prompt construction
-                        const prompt = userPrompt; // Use the user-defined prompt directly
+                        // Replace prompt placeholder
+                        const prompt = OCR_PROMPT.replace('{side}', imgData.name);
 
                         // === リトライロジック ===
->>>>>>> c79925a (feat: Add layout toggle, editable prompt, and custom model options)
                         let success = false;
                         let maxRetries = 3;
                         for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -578,30 +516,6 @@
                 startBtn.innerText = "OCR処理を開始する";
                 startBtn.style.opacity = "1";
             }
-        };
-
-        // Initialize UI
-        const defaultPrompt = `あなたはプロの校正者です。提示された画像（日本語・縦書き）をテキスト化してください。
-
-【最優先ルール】
-1. 文章を繋げる: 1行ごとの物理的な改行はすべて削除し、一つの意味の通る文章として繋げてください。
-2. 段落の維持: 文頭が一文字下がっている箇所や、明確な話題の切り替わりがある箇所のみ、改行（段落分け）を行ってください。
-3. ゴミの排除: ページ端のノイズや、半分切れている隣の段の文字は完全に無視してください。
-4. 本文のみ: 解説やメタデータは一切出力しないでください。`;
-
-        const promptArea = document.getElementById('promptArea');
-        promptArea.value = localStorage.getItem('gemini_ocr_prompt') || defaultPrompt;
-
-        document.getElementById('resetPromptBtn').onclick = () => {
-            if (confirm("プロンプトを初期値に戻しますか？")) {
-                promptArea.value = defaultPrompt;
-                localStorage.setItem('gemini_ocr_prompt', defaultPrompt);
-            }
-        };
-
-        document.getElementById('savePromptBtn').onclick = () => {
-            localStorage.setItem('gemini_ocr_prompt', promptArea.value);
-            alert("プロンプトを保存しました。");
         };
 
         // Model Custom Input Toggle
