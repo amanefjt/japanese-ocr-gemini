@@ -1,133 +1,4 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>日本語見開き縦書きPDFのOCR</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-    
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 20px auto; padding: 20px; background-color: #f5f5f7; color: #1d1d1f; }
-        h2 { text-align: center; color: #333; margin-bottom: 30px; font-weight: 700; }
-        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; position: relative; }
-        strong.label { display: block; margin-bottom: 12px; color: #0071e3; font-size: 1.1em; }
-        
-        .important-note { font-size: 0.85em; color: #1d1d1f; background: #ffffff; padding: 15px; border-radius: 8px; margin: 15px 0; border: 1px solid #d2d2d7; line-height: 1.6; }
-        .important-note a { color: #0071e3; text-decoration: underline; font-weight: bold; }
-        
-        .comparison-table { width: 100%; border-collapse: collapse; font-size: 0.8em; margin: 15px 0; background: #f9f9fb; }
-        .comparison-table th, .comparison-table td { border: 1px solid #d2d2d7; padding: 8px; text-align: center; }
-        .comparison-table th { background: #f0f0f4; font-weight: 600; }
-
-        input, select { width: 100%; padding: 12px; border: 1px solid #d2d2d7; border-radius: 8px; box-sizing: border-box; margin-bottom: 8px; font-size: 14px; background: #fafafa; }
-        .range-container { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
-        .range-container input { width: 80px; margin-bottom: 0; text-align: center; }
-
-        button { background-color: #0071e3; color: white; border: none; padding: 14px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; font-size: 16px; transition: 0.2s; }
-        button:hover { background-color: #0077ed; transform: translateY(-1px); }
-        
-        /* 4. 書き起こし結果 のレイアウト調整 */
-        .result-header { display: flex; align-items: center; justify-content: flex-start; gap: 15px; margin-bottom: 5px; }
-        .copy-btn { width: auto; font-size: 13px; padding: 8px 16px; margin-bottom: 10px; background-color: #34c759; }
-        .copy-success { font-size: 12px; color: #34c759; margin-left: 10px; font-weight: bold; opacity: 0; transition: 0.3s; }
-
-        #log { background: #ffffff; color: #333; padding: 15px; border: 1px solid #d2d2d7; border-radius: 8px; height: 120px; overflow-y: auto; font-size: 13px; line-height: 1.6; }
-        
-        /* ボックスはみ出し防止修正 */
-        textarea { 
-            width: 100%; 
-            height: 500px; 
-            border: 1px solid #d2d2d7; 
-            border-radius: 8px; 
-            padding: 15px; 
-            font-size: 15px; 
-            line-height: 1.8; 
-            margin-top: 10px; 
-            resize: vertical; 
-            box-sizing: border-box; 
-            display: block; 
-        }
-        
-        .warning-box { background: #fffdf5; border: 1px solid #f0e6cc; padding: 8px 12px; border-radius: 6px; font-size: 0.75em; color: #665c3d; margin: 10px 0; }
-        .log-error { color: #ff3b30; font-weight: bold; }
-        .log-retry { color: #f5a623; font-weight: bold; }
-        .log-success { color: #34c759; font-weight: bold; }
-
-        footer { text-align: center; margin-top: 40px; padding: 20px; font-size: 0.8em; color: #86868b; border-top: 1px solid #e5e5e7; }
-    </style>
-</head>
-<body>
-
-    <h2>日本語見開き縦書きPDFのOCR</h2>
-
-    <div class="card">
-        <strong class="label">1. 設定（APIキーとモデル）</strong>
-        
-        <input type="password" id="apiKey" placeholder="Gemini APIキーを入力">
-
-        <div class="important-note">
-            このツールはGemini APIの<strong>無料枠内で使えます。</strong><br><br>
-            🔑 <strong>Gemini APIキーについて:</strong> <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>で取得できます。無料枠で利用可能なツールですが、Googleの仕様上、<strong>支払い手段の登録が必要</strong>です。登録したAPIはローカルに保存され、ツール制作者には見られません。<br>
-            ⚠️ <strong>学習への利用について:</strong> 無料枠で取得したAPIキーを使用する場合、入力したデータはGoogleのモデル改善のために学習に利用される可能性があります。機密性の高い資料を扱う際はご注意ください。
-        </div>
-        
-        <table class="comparison-table">
-            <thead>
-                <tr>
-                    <th>モデル</th>
-                    <th>1日の上限目安</th>
-                    <th>特徴</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr><td><strong>2.5 Flash</strong></td><td>約5,000枚</td><td><strong>高精度</strong>・複雑な紙面向き</td></tr>
-                <tr><td><strong>2.0 Flash</strong></td><td>約1,500枚</td><td><strong>爆速</strong>・大量処理向き</td></tr>
-            </tbody>
-        </table>
-
-        <select id="modelSelect">
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash (推奨)</option>
-            <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-        </select>
-        <button id="saveKeyBtn">設定を保存する</button>
-    </div>
-
-    <div class="card">
-        <strong class="label">2. 実行設定</strong>
-        <input type="file" id="pdfFile" accept="application/pdf">
-        
-        <div class="warning-box">
-            ⚠️ メモリ制限を避けるため、一度に100ページ程度ずつの処理をお勧めします。
-        </div>
-
-        <div class="range-container">
-            <input type="number" id="startPage" value="1" min="1">
-            <span>ページから</span>
-            <input type="number" id="endPage" placeholder="最後" min="1">
-            <span>ページまで</span>
-        </div>
-        <button id="startBtn">OCR処理を開始する</button>
-    </div>
-
-    <div class="card">
-        <strong class="label">3. 進行状況</strong>
-        <div id="log">PDFを選択して開始してください。</div>
-    </div>
-
-    <div class="card">
-        <strong class="label">4. 書き起こし結果</strong>
-        <div class="result-header">
-            <button id="copyBtn" class="copy-btn">📋 全てコピーする</button>
-            <span id="copyMsg" class="copy-success">コピー完了！</span>
-        </div>
-        <textarea id="result" placeholder="ここに結果が表示されます..."></textarea>
-    </div>
-
-    <footer>
-        
-    </footer>
-
-    <script type="module">
+<script type="module">
         import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
@@ -141,7 +12,7 @@
         const copyMsg = document.getElementById('copyMsg');
 
         apiKeyInput.value = localStorage.getItem('gemini_api_key') || "";
-        modelSelect.value = localStorage.getItem('gemini_model_choice') || "gemini-2.5-flash";
+        modelSelect.value = localStorage.getItem('gemini_model_choice') || "gemini-2.0-flash";
 
         document.getElementById('saveKeyBtn').onclick = () => {
             localStorage.setItem('gemini_api_key', apiKeyInput.value);
@@ -185,7 +56,7 @@
                 const actualEnd = Math.min(pdf.numPages, parseInt(endPageInput.value) || pdf.numPages);
 
                 for (let i = actualStart; i <= actualEnd; i++) {
-                    addLog(`[${i}/${actualEnd}] ページ処理中...`);
+                    addLog(`[${i}/${actualEnd}] レイアウト解析中...`);
                     const page = await pdf.getPage(i);
                     const viewport = page.getViewport({scale: 2.5});
                     const canvas = document.createElement('canvas');
@@ -193,15 +64,37 @@
                     canvas.height = viewport.height;
                     canvas.width = viewport.width;
                     await page.render({canvasContext: ctx, viewport: viewport}).promise;
-                    
-                    const mid = canvas.width / 2;
-                    const margin = Math.floor(canvas.width * 0.05); 
-                    
-                    const sides = [
-                        { name: "右側", x: mid - margin, w: canvas.width - (mid - margin) },
-                        { name: "左側", x: 0, w: mid + margin }
-                    ];
 
+                    // 1. レイアウト判定用の画像生成（ページ全体）
+                    const fullPageBase64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+                    
+                    let layoutType = "SINGLE";
+                    try {
+                        const layoutPrompt = "この画像は「一段組（1ページ1面）」ですか、それとも「二段組（見開き）」ですか？ 'SINGLE' または 'DOUBLE' とだけ回答してください。";
+                        const layoutResult = await model.generateContent([{ inlineData: { data: fullPageBase64, mimeType: "image/jpeg" } }, layoutPrompt]);
+                        layoutType = layoutResult.response.text().toUpperCase();
+                    } catch (e) {
+                        addLog(`  [!] レイアウト判定失敗。一段組として続行します。`, 'retry');
+                    }
+
+                    // 2. 判定結果に基づいて分割設定を決定
+                    let sides = [];
+                    if (layoutType.includes("DOUBLE")) {
+                        addLog(`  -> 二段組として左右分割して処理します。`);
+                        const mid = canvas.width / 2;
+                        const margin = Math.floor(canvas.width * 0.05); 
+                        sides = [
+                            { name: "右側", x: mid - margin, w: canvas.width - (mid - margin) },
+                            { name: "左側", x: 0, w: mid + margin }
+                        ];
+                    } else {
+                        addLog(`  -> 一段組として全体を処理します。`);
+                        sides = [
+                            { name: "全体", x: 0, w: canvas.width }
+                        ];
+                    }
+
+                    // 3. 各パーツ（または全体）のOCR実行
                     let pageText = `--- Page ${i} ---\n`;
                     for (const side of sides) {
                         const sCanvas = document.createElement('canvas');
@@ -209,10 +102,7 @@
                         sCanvas.getContext('2d').drawImage(canvas, side.x, 0, side.w, canvas.height, 0, 0, side.w, canvas.height);
                         const base64Data = sCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
                         
-                        // 高精度プロンプトへの差し替え
-                        const prompt = `指示：日本語書籍（縦書き・見開き）の超高精度テキスト化
-
-指示：日本語書籍（縦書き・見開き）の超高精度テキスト化と論理構造の再構築
+                        const prompt = `指示：日本語書籍（縦書き）の超高精度テキスト化と論理構造の再構築
 
 1. 役割
 あなたは、国立国会図書館のデジタルアーカイブ化プロジェクトに従事する、世界最高峰のデータ入力エキスパートです。提示された画像（スキャンされた日本語の縦書き・見開き書籍）を読み取り、**書籍の物理的な行区切りではなく、著者が意図した論理的な文章構造として**テキスト化してください。
@@ -236,9 +126,12 @@
                         for (let attempt = 0; attempt < maxRetries; attempt++) {
                             try {
                                 const result = await model.generateContent([{ inlineData: { data: base64Data, mimeType: "image/jpeg" } }, prompt]);
-                                pageText += result.response.text() + "\n";
-                                success = true;
-                                break;
+                                const text = result.response.text();
+                                if (text) {
+                                    pageText += text + "\n";
+                                    success = true;
+                                    break;
+                                }
                             } catch (err) {
                                 const msg = err.message || "";
                                 if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("503")) {
@@ -251,7 +144,8 @@
                                 }
                             }
                         }
-                        await new Promise(r => setTimeout(r, 1000));
+                        // API負荷軽減のための微小な待機
+                        await new Promise(r => setTimeout(r, 800));
                     }
                     resultArea.value += pageText + "\n";
                     resultArea.scrollTop = resultArea.scrollHeight;
@@ -261,5 +155,3 @@
             } catch (err) { addLog("重大なエラー: " + err.message, 'error'); }
         };
     </script>
-</body>
-</html>
