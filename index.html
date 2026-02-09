@@ -263,10 +263,6 @@
         <strong class="label">2. 実行設定</strong>
         <input type="file" id="pdfFile" accept="application/pdf">
 
-        <div class="warning-box">
-            ⚠️ メモリ制限を避けるため、一度に100ページ程度ずつの処理をお勧めします。
-        </div>
-
         <strong class="label" style="font-size: 0.9em; margin-top: 15px;">文書のレイアウト</strong>
         <div style="margin-bottom: 15px;">
             <label style="margin-right: 15px;">
@@ -283,6 +279,10 @@
             <input type="number" id="endPage" placeholder="最後" min="1">
             <span>ページまで</span>
         </div>
+        <div class="warning-box">
+            ⚠️ メモリ制限を避けるため、一度に100ページ程度ずつの処理をお勧めします。
+        </div>
+        
         <button id="startBtn">OCR処理を開始する</button>
     </div>
 
