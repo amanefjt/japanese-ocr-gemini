@@ -1,0 +1,7 @@
+.DS_Store
+service-account-key.json
+*.pdf
+ocr_result.txt
+venv/
+__pycache__/
+.env
