@@ -6,7 +6,7 @@ import tempfile
 import shutil
 from pathlib import Path
 from datetime import datetime
-from typing import Generator
+import numpy as np
 from PIL import Image
 from pdf2image import convert_from_path
 from google import genai
@@ -21,8 +21,8 @@ load_dotenv()
 # 環境変数からAPIキーを取得
 API_KEY = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
 
-# 使用するモデル
-MODEL_ID = "gemini-3-flash-preview"
+# 使用するモデル (model_optimization.md に基づく)
+MODEL_ID = "gemini-3.1-flash-lite-preview"
 
 # 解像度
 DPI = 300
@@ -32,27 +32,16 @@ START_PAGE = 1
 END_PAGE = None 
 
 # ================= プロンプト設定 =================
-OCR_PROMPT = """指示：日本語書籍（縦書き・見開き）の超高精度テキスト化
+OCR_PROMPT = """指示：日本語書籍（縦書き一段組）の超高精度テキスト化
 
-1. 読字方向の厳守（最優先）
-この画像はPDFからスキャンされた日本語の「縦書き・見開き」レイアウトです。絶対に横方向（左から右）に読まないでください。
-必ず以下の順序でテキスト化してください：
-- まず右のページの、一番右側の行から順に左に向かって（Right-to-Left）下まで読み進める。
-- 右ページがすべて終わったら、次に左ページの、一番右側の行から順に左に向かって読む。
+あなたは、国立国会図書館のデジタルアーカイブ化プロジェクトに従事するデータ入力エキスパートです。提示された画像（縦書き一段組の本文）をテキスト化してください。
 
-2. ノイズの完全排除
-以下の要素は本文の文脈を破壊するため、出力から完全に除外してください：
-- 各ページの上部・下部にあるページ番号（例：169、170）
-- 書籍のタイトルや章名（例：食のフィールドワーカー）などの柱（ヘッダー・フッター）
-- ルビ：ルビは無視し、親文字（本文）のみを抽出してください。
-- 図表
-- 文字間の不自然なスペース
+【規則】
+1. 文章の連結: 書籍上の物理的な改行位置では絶対に改行せず、行末と次行の行頭を間にスペースを入れずに連結し、一つの文にしてください。
+2. 段落の保持: 改行を行うのは、「段落が変わる箇所（通常、文頭が一字下がっている箇所）」のみとしてください。
+3. ノイズの除去: ページ番号（ノンブル）、ヘッダー（柱）、フッターは出力から完全に除外してください。
+4. ルビ・図表: 本文の流れを阻害しないよう、ルビや図表内の文字は無視してください。
 
-3. 段落と改行の扱い
-- 物理的な行末での改行は禁止です。文章は一つの連続した文として連結してください。
-- 改行を挿入するのは、「段落が切り替わる箇所」および「見出し」の前後のみとしてください。
-
-4. 出力形式
 出力は文字修飾のないプレーンテキスト形式とし、挨拶や解説は一切含めないでください。"""
 
 # ================= 1. 画像処理モジュール (SOLID: 単一責任) =================
@@ -77,27 +66,73 @@ def extract_images_to_list(pdf_path: Path, temp_dir: Path, dpi: int = 300, split
         return img_paths
 
     final_paths = []
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] 見開き画像を左右に分割中 (5% 重複クロップ)...")
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] 見開き画像を4分割中 (右上 -> 右下 -> 左上 -> 左下)...")
     
     for i, spread_path in enumerate(img_paths):
         with Image.open(spread_path) as img:
-            width, height = img.size
-            margin = int(width * 0.05)
-            center = width // 2
+            # Step 0: 画像のNumpy配列化 (グレースケール)
+            gray_img = img.convert("L")
+            img_array = np.array(gray_img)
+            height, width = img_array.shape
+            
+            # Step 1: ノド（左右）の分割
+            # X軸の中央 40%〜60% の範囲を探索
+            x_min = int(width * 0.40)
+            x_max = int(width * 0.60)
+            # 各列のピクセル値の合計を計算 (白い部分ほど値が大きくなる)
+            col_sums = np.sum(img_array[:, x_min:x_max], axis=0)
+            # 最も白い列のX座標 (元の全体幅における座標に戻す)
+            split_x = x_min + np.argmax(col_sums)
+            
+            # 右ページと左ページの画像を生成
+            img_right = img.crop((split_x, 0, width, height))   # 右ページ
+            img_left = img.crop((0, 0, split_x, height))      # 左ページ
+            
+            # Step 2: 段間（上下）の分割を行う関数
+            def split_vertical(target_img: Image.Image, side_name: str) -> tuple[Image.Image, Image.Image]:
+                arr = np.array(target_img.convert("L"))
+                h, w = arr.shape
+                # Y軸の中央 40%〜60% の範囲を探索
+                y_min = int(h * 0.40)
+                y_max = int(h * 0.60)
+                # 各行のピクセル値の合計を計算
+                row_sums = np.sum(arr[y_min:y_max, :], axis=1)
+                # 最も白い行のY座標 (元の全体高さにおける座標に戻す)
+                split_y = y_min + np.argmax(row_sums)
+                
+                # 上段と下段の画像を生成
+                img_top = target_img.crop((0, 0, w, split_y))
+                img_bottom = target_img.crop((0, split_y, w, h))
+                return img_top, img_bottom
 
-            # 右側
-            right_img = img.crop((center - margin, 0, width, height))
-            r_path = temp_dir / f"{spread_path.stem}_{i:03}_R.jpg"
-            right_img.save(r_path, "JPEG", quality=95)
-            final_paths.append(r_path)
-
-            # 左側
-            left_img = img.crop((0, 0, center + margin, height))
-            l_path = temp_dir / f"{spread_path.stem}_{i:03}_L.jpg"
-            left_img.save(l_path, "JPEG", quality=95)
-            final_paths.append(l_path)
-        
-        # 元の画像は削除してディスクスペースを節約
+            # 右ページを上下に分割
+            rt_img, rb_img = split_vertical(img_right, "Right")
+            # 左ページを上下に分割
+            lt_img, lb_img = split_vertical(img_left, "Left")
+            
+            # 命名規則と保存 (送信順序に合わせてリストに追加: 1.右ページ上段 -> 2.右下段 -> 3.左上段 -> 4.左下段)
+            
+            # 1. 右ページ上段
+            rt_path = temp_dir / f"{spread_path.stem}_{i:03}_01_RT.jpg"
+            rt_img.save(rt_path, "JPEG", quality=95)
+            final_paths.append(rt_path)
+            
+            # 2. 右ページ下段
+            rb_path = temp_dir / f"{spread_path.stem}_{i:03}_02_RB.jpg"
+            rb_img.save(rb_path, "JPEG", quality=95)
+            final_paths.append(rb_path)
+            
+            # 3. 左ページ上段
+            lt_path = temp_dir / f"{spread_path.stem}_{i:03}_03_LT.jpg"
+            lt_img.save(lt_path, "JPEG", quality=95)
+            final_paths.append(lt_path)
+            
+            # 4. 左ページ下段
+            lb_path = temp_dir / f"{spread_path.stem}_{i:03}_04_LB.jpg"
+            lb_img.save(lb_path, "JPEG", quality=95)
+            final_paths.append(lb_path)
+            
+        # 元の見開き画像は削除してディスクスペースを節約
         spread_path.unlink()
 
     return final_paths
@@ -115,13 +150,19 @@ async def call_gemini_async_with_retry(client, image_path: Path, prompt: str, pa
             async with limiter:
                 start_time = time.time()
                 # aio 経由で非同期実行
+                # model_optimization.md の指示に従い thinking_config を設定
+                generate_config = types.GenerateContentConfig(
+                    temperature=0.0,
+                    thinking_config=types.ThinkingConfig(thinking_level="HIGH")
+                )
+                
                 response = await client.aio.models.generate_content(
                     model=MODEL_ID,
                     contents=[
                         prompt,
                         types.Part.from_bytes(data=image_data, mime_type="image/jpeg")
                     ],
-                    config=types.GenerateContentConfig(temperature=0.0)
+                    config=generate_config
                 )
                 
                 duration = time.time() - start_time
@@ -211,7 +252,17 @@ async def main_async():
         with open(output_path, "w", encoding="utf-8") as f:
             for i, img_path in enumerate(image_paths):
                 current_num = i + 1
-                side = "右側" if "_R.jpg" in img_path.name else ("左側" if "_L.jpg" in img_path.name else "見開き全体")
+                # 命名規則からどの部分かを判定
+                if "_RT.jpg" in img_path.name:
+                    side = "右ページ上段"
+                elif "_RB.jpg" in img_path.name:
+                    side = "右ページ下段"
+                elif "_LT.jpg" in img_path.name:
+                    side = "左ページ上段"
+                elif "_LB.jpg" in img_path.name:
+                    side = "左ページ下段"
+                else:
+                    side = "見開き全体"
                 
                 print(f"[{current_num}/{total_items}] OCR処理中 ({side})...")
                 
@@ -219,9 +270,10 @@ async def main_async():
                     client, img_path, OCR_PROMPT, current_num, side, limiter
                 )
                 
-                # 結果を即座に書き出し
-                if "_R" in img_path.name or "全体" in side:
-                    f.write(f"\n\n--- Page Group {current_num // 2 + 1 if use_split else current_num} ---\n")
+                # 右ページ上段または見開き全体の開始時にページヘッダを書き込む
+                if "_RT.jpg" in img_path.name or "全体" in side:
+                    page_idx = (current_num - 1) // 4 + 1 if use_split else current_num
+                    f.write(f"\n\n--- Page Group {page_idx} ---\n")
                 
                 f.write(text + "\n")
                 f.flush()
