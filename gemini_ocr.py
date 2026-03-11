@@ -3,8 +3,10 @@ import time
 import asyncio
 import argparse
 import tempfile
+import shutil
 from pathlib import Path
 from datetime import datetime
+from typing import Generator
 from PIL import Image
 from pdf2image import convert_from_path
 from google import genai
@@ -19,7 +21,7 @@ load_dotenv()
 # 環境変数からAPIキーを取得
 API_KEY = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
 
-# 使用するモデル (以前の古い設定を維持)
+# 使用するモデル
 MODEL_ID = "gemini-3-flash-preview"
 
 # 解像度
@@ -30,23 +32,25 @@ START_PAGE = 1
 END_PAGE = None 
 
 # ================= プロンプト設定 =================
-# 以前の古いプロンプトをそのまま維持
 OCR_PROMPT = """指示：日本語書籍（縦書き・見開き）の超高精度テキスト化
 
-1. 役割
-あなたは、国立国会図書館のデジタルアーカイブ化プロジェクトに従事する、世界最高峰のデータ入力エキスパートです。提示された画像（スキャンされた日本語の縦書き・見開きの{side}部分）を、一文字の妥協もなく、元の文章のレイアウトを完全に維持した状態でテキスト化してください。
+1. 読字方向の厳守（最優先）
+この画像はPDFからスキャンされた日本語の「縦書き・見開き」レイアウトです。絶対に横方向（左から右）に読まないでください。
+必ず以下の順序でテキスト化してください：
+- まず右のページの、一番右側の行から順に左に向かって（Right-to-Left）下まで読み進める。
+- 右ページがすべて終わったら、次に左ページの、一番右側の行から順に左に向かって読む。
 
-2. ドキュメント構造の理解
-* **重複の排除（重要）**: 見開き画像の分割処理において、中央部分（ノド）付近の文章が左右の画像で重複している場合があります。この場合、重複部分を検出し、**一度だけ**出力するようにしてください（二重に出力しないこと）。
-* **文章の連結（最重要）**: 書籍上の物理的な改行位置では**絶対に改行コードを入れないでください**。行末と次行の行頭は、間にスペースを入れずに連結し、一つの文として続けてください。
-* **段落の扱い**: 改行を行うのは、**「段落が変わる箇所（通常、文頭が一字下がっている箇所）」**および「見出し」の前後のみとしてください。
+2. ノイズの完全排除
+以下の要素は本文の文脈を破壊するため、出力から完全に除外してください：
+- 各ページの上部・下部にあるページ番号（例：169、170）
+- 書籍のタイトルや章名（例：食のフィールドワーカー）などの柱（ヘッダー・フッター）
+- ルビ：ルビは無視し、親文字（本文）のみを抽出してください。
+- 図表
+- 文字間の不自然なスペース
 
-3. 具体的な処理規則
-* **文字認識**: 常用漢字、旧字体、ひらがな、カタカナ、句読点を正確に識別してください。
-* **ノイズの除去**: ページ番号（ノンブル）、ヘッダー（柱）、フッターは本文の文脈を分断するため、**出力から完全に除外してください**。
-* **推論による補完**: スキャンの歪みや綴じ部分の影で文字が不鮮明な場合や明らかなOCRエラーは、前後の文脈から日本語として最も自然な文字を推論して埋めてください。
-* **ルビ・図表**: 本文の自然な流れを阻害しないよう、ルビや図表内の文字は読み飛ばしてください。
-* **不要な空白の削除**: 文字間の不自然なスペースはすべて削除し、詰めて記述してください。
+3. 段落と改行の扱い
+- 物理的な行末での改行は禁止です。文章は一つの連続した文として連結してください。
+- 改行を挿入するのは、「段落が切り替わる箇所」および「見出し」の前後のみとしてください。
 
 4. 出力形式
 出力は文字修飾のないプレーンテキスト形式とし、挨拶や解説は一切含めないでください。"""
@@ -103,8 +107,6 @@ def extract_images_to_list(pdf_path: Path, temp_dir: Path, dpi: int = 300, split
 async def call_gemini_async_with_retry(client, image_path: Path, prompt: str, page_num: int, side: str, limiter: AsyncLimiter):
     """Gemini APIを非同期で呼び出し、詳細なエラー報告とリトライを行う"""
     
-    formatted_prompt = prompt.replace("{side}", side)
-
     for attempt in range(5):
         try:
             with open(image_path, "rb") as f:
@@ -116,7 +118,7 @@ async def call_gemini_async_with_retry(client, image_path: Path, prompt: str, pa
                 response = await client.aio.models.generate_content(
                     model=MODEL_ID,
                     contents=[
-                        formatted_prompt,
+                        prompt,
                         types.Part.from_bytes(data=image_data, mime_type="image/jpeg")
                     ],
                     config=types.GenerateContentConfig(temperature=0.0)
@@ -158,15 +160,18 @@ def parse_args():
 async def main_async():
     args = parse_args()
     
-    # パス入力の処理 (古いコードの挙動を維持)
+    # パス入力の処理
     input_path_str = args.input_pdf
     if not input_path_str:
-        print("PDFファイルのパスを指定してください。 (tobeocr.pdf を探す場合はそのままエンター)")
-        input_path_str = input("パス: ").strip() or "tobeocr.pdf"
-    
+        print("PDFファイルのパスを指定してください。")
+        input_path_str = input("パス: ").strip()
+        if not input_path_str:
+            # デフォルトファイル名
+            input_path_str = "hirano.pdf"
+
     input_path = Path(input_path_str).absolute()
     if not input_path.exists():
-        print(f"エラー: ファイルが見つかりません: {input_path}")
+        print(f"エラー: 指定されたファイルが見つかりません: {input_path}")
         return
 
     output_path = input_path.with_name(f"{input_path.stem}_ocr.txt")
@@ -188,7 +193,7 @@ async def main_async():
     use_split = (mode == '2')
     
     print(f"\n--- 処理開始: {input_path.name} ---")
-    print(f"--- 構成: {'SOLID + メモリ保護 (非同期リトライ版)'} ---")
+    print(f"--- 構成: SOLID + メモリ保護 (非同期リトライ版) ---")
     print(f"--- 出力先: {output_path} ---\n")
 
     # APIレート制限 (1分間に15リクエスト程度に制限して安定させる)
