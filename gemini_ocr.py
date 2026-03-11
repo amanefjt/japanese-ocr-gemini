@@ -1,35 +1,36 @@
 import os
 import time
+import asyncio
 import argparse
+import tempfile
 from pathlib import Path
-from google import genai
+from datetime import datetime
+from PIL import Image
 from pdf2image import convert_from_path
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
+from aiolimiter import AsyncLimiter
 
 # .env ファイルから環境変数を読み込む
 load_dotenv()
 
 # ================= 設定エリア =================
-# 環境変数からAPIキーを取得 (設定されていない場合は None)
-API_KEY = os.getenv('GEMINI_API_KEY')
-# デフォルトのファイル名（カレントディレクトリに存在する場合）
-DEFAULT_PDF_NAME = 'tobeocr.pdf'
+# 環境変数からAPIキーを取得
+API_KEY = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
 
-# 3 Flash を指定（推奨）
+# 使用するモデル (以前の古い設定を維持)
 MODEL_ID = "gemini-3-flash-preview"
 
-# 解像度 (300DPIがOCR精度とコストのバランスが最適です)
+# 解像度
 DPI = 300
 
 # 処理するページ範囲
 START_PAGE = 1
 END_PAGE = None 
 
-# 基本待機時間
-WAIT_TIME = 0.1
-# ============================================
-
-# 高精度プロンプト（ハードコード済み）
+# ================= プロンプト設定 =================
+# 以前の古いプロンプトをそのまま維持
 OCR_PROMPT = """指示：日本語書籍（縦書き・見開き）の超高精度テキスト化
 
 1. 役割
@@ -48,138 +49,187 @@ OCR_PROMPT = """指示：日本語書籍（縦書き・見開き）の超高精�
 * **不要な空白の削除**: 文字間の不自然なスペースはすべて削除し、詰めて記述してください。
 
 4. 出力形式
-出力は純粋なMarkdown形式とし、挨拶や解説は一切含めないでください。"""
+出力は文字修飾のないプレーンテキスト形式とし、挨拶や解説は一切含めないでください。"""
 
-def run_ultimate_ocr():
-    # 引数処理
-    parser = argparse.ArgumentParser(description='Gemini APIを使用した高精度OCRツール')
-    parser.add_argument('input_path', nargs='?', default=None, help='OCR対象のPDFファイルパス')
-    args = parser.parse_args()
+# ================= 1. 画像処理モジュール (SOLID: 単一責任) =================
 
-    input_path_str = args.input_path
+def extract_images_to_list(pdf_path: Path, temp_dir: Path, dpi: int = 300, split: bool = True) -> list[Path]:
+    """PDFを画像化し、必要に応じて物理分割（メモリ保護のためディスク経由）"""
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] PDF画像変換中 (DPI: {dpi})...")
     
-    # 引数がない場合は入力を求める
+    # メモリ節約のため paths_only=True でディスクに直接書き出す (OOM保護)
+    img_paths = convert_from_path(
+        str(pdf_path),
+        dpi=dpi,
+        first_page=START_PAGE,
+        last_page=END_PAGE,
+        output_folder=str(temp_dir),
+        fmt="jpeg",
+        paths_only=True
+    )
+    img_paths = sorted([Path(p) for p in img_paths])
+
+    if not split:
+        return img_paths
+
+    final_paths = []
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] 見開き画像を左右に分割中 (5% 重複クロップ)...")
+    
+    for i, spread_path in enumerate(img_paths):
+        with Image.open(spread_path) as img:
+            width, height = img.size
+            margin = int(width * 0.05)
+            center = width // 2
+
+            # 右側
+            right_img = img.crop((center - margin, 0, width, height))
+            r_path = temp_dir / f"{spread_path.stem}_{i:03}_R.jpg"
+            right_img.save(r_path, "JPEG", quality=95)
+            final_paths.append(r_path)
+
+            # 左側
+            left_img = img.crop((0, 0, center + margin, height))
+            l_path = temp_dir / f"{spread_path.stem}_{i:03}_L.jpg"
+            left_img.save(l_path, "JPEG", quality=95)
+            final_paths.append(l_path)
+        
+        # 元の画像は削除してディスクスペースを節約
+        spread_path.unlink()
+
+    return final_paths
+
+# ================= 2. API通信モジュール (SOLID: 単一責任 + リトライ強化) =================
+
+async def call_gemini_async_with_retry(client, image_path: Path, prompt: str, page_num: int, side: str, limiter: AsyncLimiter):
+    """Gemini APIを非同期で呼び出し、詳細なエラー報告とリトライを行う"""
+    
+    formatted_prompt = prompt.replace("{side}", side)
+
+    for attempt in range(5):
+        try:
+            with open(image_path, "rb") as f:
+                image_data = f.read()
+            
+            async with limiter:
+                start_time = time.time()
+                # aio 経由で非同期実行
+                response = await client.aio.models.generate_content(
+                    model=MODEL_ID,
+                    contents=[
+                        formatted_prompt,
+                        types.Part.from_bytes(data=image_data, mime_type="image/jpeg")
+                    ],
+                    config=types.GenerateContentConfig(temperature=0.0)
+                )
+                
+                duration = time.time() - start_time
+                if response.text:
+                    print(f"  [OK] Page {page_num} ({side}): 完了 ({duration:.1f}s)")
+                    return response.text
+                return ""
+
+        except Exception as e:
+            err_msg = str(e)
+            # 詳細なエラー種類の判定
+            if any(code in err_msg for code in ["429", "RESOURCE_EXHAUSTED"]):
+                wait_sec = (2 ** attempt) + 5
+                print(f"  [!] Page {page_num} ({side}): レート制限発生。{wait_sec}秒待機してリトライします... ({attempt+1}/5)")
+                await asyncio.sleep(wait_sec)
+            elif any(code in err_msg for code in ["500", "503", "504"]):
+                wait_sec = 2
+                print(f"  [!] Page {page_num} ({side}): サーバーエラー({err_msg[:20]}...)。再試行します。")
+                await asyncio.sleep(wait_sec)
+            else:
+                # 致命的なエラー（認証、ファイル不備など）は即座に報告
+                print(f"  [x] Page {page_num} ({side}): 致命的なエラー: {e}")
+                return f"[[ERROR_PAGE_{page_num}_{side}]]"
+    
+    print(f"  [x] Page {page_num} ({side}): 全リトライが失敗しました。")
+    return f"[[RETRY_FAILED_PAGE_{page_num}_{side}]]"
+
+# ================= 3. メイン制御フロー =================
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Gemini APIを使用した高機能OCR")
+    parser.add_argument("input_pdf", nargs='?', help="入力PDFファイルのパス")
+    parser.add_argument("--mode", choices=['1', '2'], help="1: 一段組, 2: 二段組(分割あり)")
+    return parser.parse_args()
+
+async def main_async():
+    args = parse_args()
+    
+    # パス入力の処理 (古いコードの挙動を維持)
+    input_path_str = args.input_pdf
     if not input_path_str:
-        print("PDFファイルのパスを指定してください。")
-        print(f"何も入力せずにエンターを押すと、現在のフォルダの '{DEFAULT_PDF_NAME}' を探します。")
-        input_path_str = input("パス: ").strip()
-        if not input_path_str:
-            input_path_str = DEFAULT_PDF_NAME
-
-    input_path = Path(input_path_str).absolute()
+        print("PDFファイルのパスを指定してください。 (tobeocr.pdf を探す場合はそのままエンター)")
+        input_path_str = input("パス: ").strip() or "tobeocr.pdf"
     
+    input_path = Path(input_path_str).absolute()
     if not input_path.exists():
-        print(f"エラー: 指定されたファイルが見つかりません: {input_path}")
+        print(f"エラー: ファイルが見つかりません: {input_path}")
         return
 
-    # 出力ファイルを入力ファイルと同じディレクトリに設定
     output_path = input_path.with_name(f"{input_path.stem}_ocr.txt")
-
+    
     if not API_KEY:
-        print("エラー: GEMINI_API_KEY が .env ファイルまたは環境変数に設定されていません。")
+        print("エラー: APIキーが設定されていません。")
         return
-
+        
     client = genai.Client(api_key=API_KEY)
     
-    print(f"--- 高精度OCR処理開始: {input_path} ---")
-    print(f"--- 出力先: {output_path} ---")
-    print(f"--- 使用モデル: {MODEL_ID} ---")
-
-    try:
-        # PDFを画像に変換
-        print("PDFを読み込んでいます...")
-        images = convert_from_path(str(input_path), dpi=DPI, first_page=START_PAGE, last_page=END_PAGE)
-    except Exception as e:
-        print(f"PDF読み込みエラー: {e}")
-        return
-
     # レイアウト選択
-    print("\n--- 文書のレイアウトを選択してください ---")
-    print("1: 一段組 (分割なし) - 絵本や一般書など、見開き全体で処理します")
-    print("2: 二段組 (自動分割) - 論文や小説など、左右に分割して処理します")
+    mode = args.mode
+    if not mode:
+        print("\n--- 文書のレイアウトを選択してください ---")
+        print("1: 一段組 (分割なし)")
+        print("2: 二段組 (自動分割)")
+        mode = input("選択 (1 または 2): ").strip()
     
-    while True:
-        layout_choice = input("選択 (1 または 2): ").strip()
-        if layout_choice in ['1', '2']:
-            break
-        print("1 か 2 を入力してください。")
+    use_split = (mode == '2')
+    
+    print(f"\n--- 処理開始: {input_path.name} ---")
+    print(f"--- 構成: {'SOLID + メモリ保護 (非同期リトライ版)'} ---")
+    print(f"--- 出力先: {output_path} ---\n")
 
-    print(f"\n処理を開始します... (全{len(images)}ページ)\n")
+    # APIレート制限 (1分間に15リクエスト程度に制限して安定させる)
+    limiter = AsyncLimiter(15, 60)
 
-    # モード 'a' で追記（既存のファイルを上書きしたくない場合は 'a'、毎回新しくしたい場合は 'w'）
-    # ユーザーの「同じ場所に結果を出力」という要望に合わせ、上書き/新規作成（'w'）を選択
-    with open(output_path, 'w', encoding='utf-8') as f:
-        for i, image in enumerate(images):
-            current_page_num = START_PAGE + i
-            print(f"[{current_page_num}/{START_PAGE + len(images) - 1}] ページ処理中...")
-            
-            width, height = image.size
-            parts = []
-
-            if layout_choice == '2':
-                # === 二段組（自動分割） ===
-                margin = int(width * 0.05) # 中央の重なり部分（5%）
-                center = width // 2
+    # 一時ディレクトリで作業 (OOM保護)
+    with tempfile.TemporaryDirectory() as temp_dir_str:
+        temp_dir = Path(temp_dir_str)
+        
+        # 1. 画像抽出 (ディスク経由)
+        image_paths = extract_images_to_list(input_path, temp_dir, DPI, split=use_split)
+        total_items = len(image_paths)
+        
+        # 2. OCR処理 (非同期)
+        with open(output_path, "w", encoding="utf-8") as f:
+            for i, img_path in enumerate(image_paths):
+                current_num = i + 1
+                side = "右側" if "_R.jpg" in img_path.name else ("左側" if "_L.jpg" in img_path.name else "見開き全体")
                 
-                # 右側
-                parts.append({
-                    "name": "右側", 
-                    "img": image.crop((center - margin, 0, width, height))
-                })
-                # 左側
-                parts.append({
-                    "name": "左側", 
-                    "img": image.crop((0, 0, center + margin, height))
-                })
-            else:
-                # === 一段組（分割なし） ===
-                parts.append({
-                    "name": "見開き全体", 
-                    "img": image
-                })
-            
-            f.write(f"\n\n--- Page {current_page_num} ---\n")
-
-            for part in parts:
-                side = part["name"]
-                cropped_img = part["img"]
+                print(f"[{current_num}/{total_items}] OCR処理中 ({side})...")
                 
-                prompt = OCR_PROMPT.replace("{side}", side)
- 
-                success = False
-                max_retries = 5
+                text = await call_gemini_async_with_retry(
+                    client, img_path, OCR_PROMPT, current_num, side, limiter
+                )
                 
-                for attempt in range(max_retries):
-                    try:
-                        response = client.models.generate_content(
-                            model=MODEL_ID, 
-                            contents=[prompt, cropped_img]
-                        )
-                        
-                        if response.text:
-                            f.write(response.text + "\n")
-                            f.flush()
-                            success = True
-                        break 
-
-                    except Exception as e:
-                        err_msg = str(e)
-                        if any(code in err_msg for code in ["429", "RESOURCE_EXHAUSTED", "503"]):
-                            wait_sec = 5 * (attempt + 1)
-                            print(f"  [!] API制限発生 ({side})。{wait_sec}秒待機してリトライします... ({attempt+1}/{max_retries})")
-                            time.sleep(wait_sec)
-                        else:
-                            print(f"  [x] エラー ({side}): {e}")
-                            break 
+                # 結果を即座に書き出し
+                if "_R" in img_path.name or "全体" in side:
+                    f.write(f"\n\n--- Page Group {current_num // 2 + 1 if use_split else current_num} ---\n")
                 
-                if not success:
-                    print(f"  [x] {side} の処理に失敗しました。")
-
-                time.sleep(WAIT_TIME)
-
-            print(f"[{current_page_num}] 完了")
-
-    print(f"\nすべての処理が完了しました。結果は「{output_path}」に保存されています。")
+                f.write(text + "\n")
+                f.flush()
+                
+                # 小休止
+                await asyncio.sleep(0.05)
+        
+    print(f"\nすべての処理が完了しました。結果: {output_path}")
 
 if __name__ == '__main__':
-    run_ultimate_ocr()
+    try:
+        asyncio.run(main_async())
+    except KeyboardInterrupt:
+        print("\n中断されました。")
+    except Exception as e:
+        print(f"\n予期せぬエラーが発生しました: {e}")

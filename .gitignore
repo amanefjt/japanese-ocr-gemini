@@ -5,3 +5,4 @@ ocr_result.txt
 venv/
 __pycache__/
 .env
+Sample/
