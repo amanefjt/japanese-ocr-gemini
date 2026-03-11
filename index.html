@@ -214,7 +214,7 @@
     <h2>日本語縦書きPDFのOCR</h2>
 
     <div class="card">
-        <strong class="label">1. 設定（APIキーとモデル）</strong>
+        <strong class="label">1. 設定（APIキー）</strong>
 
         <input type="password" id="apiKey" placeholder="Gemini APIキーを入力">
 
@@ -226,36 +226,6 @@
             ⚠️ <strong>学習への利用について:</strong>
             無料枠で取得したAPIキーを使用する場合、入力したデータはGoogleのモデル改善のために学習に利用される可能性があります。機密性の高い資料を扱う際はご注意ください。
         </div>
-
-        <table class="comparison-table">
-            <thead>
-                <tr>
-                    <th>モデル</th>
-                    <th>1日の上限目安</th>
-                    <th>特徴</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td><strong>3 Flash Preview</strong></td>
-                    <td>約1,500枚</td>
-                    <td><strong>高精度</strong>・複雑な紙面向き</td>
-                </tr>
-                <tr>
-                    <td><strong>2.5 Flash</strong></td>
-                    <td>約5,000枚</td>
-                    <td><strong>大量処理</strong>・多くの紙面をOCRしたいとき</td>
-                </tr>
-            </tbody>
-        </table>
-
-        <select id="modelSelect">
-            <option value="gemini-3-flash-preview">Gemini 3 Flash Preview (推奨)</option>
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-            <option value="custom">カスタムモデル名を入力...</option>
-        </select>
-        <input type="text" id="customModelInput" placeholder="例: gemini-1.5-pro"
-            style="display: none; margin-top: 5px;">
         <button id="saveKeyBtn">設定を保存する</button>
     </div>
 
@@ -263,24 +233,22 @@
         <strong class="label">2. 実行設定</strong>
         <input type="file" id="pdfFile" accept="application/pdf">
 
-        <strong class="label" style="font-size: 0.9em; margin-top: 15px;">文書のレイアウト</strong>
-        <div style="margin-bottom: 15px;">
-            <label style="margin-right: 15px;">
-                <input type="radio" name="layout" value="two-column" checked style="width: auto;"> 二段組（自動分割）
-            </label>
-            <label>
-                <input type="radio" name="layout" value="one-column" style="width: auto;"> 一段組（分割なし）
-            </label>
+        <div
+            style="margin-top: 15px; background: #f0f7ff; padding: 12px; border-radius: 8px; border: 1px solid #cce5ff;">
+            <strong class="label" style="font-size: 0.9em; margin-bottom: 5px;">実行ティア（API制限の選択）</strong>
+            <select id="tierSelect" style="margin-bottom: 0;">
+                <option value="free">無料枠ユーザー (15 RPM / 3並列)</option>
+            </select>
         </div>
 
-        <div class="range-container">
+        <div class="range-container" style="margin-top: 15px;">
             <input type="number" id="startPage" value="1" min="1">
             <span>ページから</span>
             <input type="number" id="endPage" placeholder="最後" min="1">
             <span>ページまで</span>
         </div>
         <div class="warning-box">
-            ⚠️ メモリ制限を避けるため、一度に100ページ程度ずつの処理をお勧めします。
+            ⚠️ ブラウザのメモリ制限のため、一度に100ページ程度ずつの処理をお勧めします。
         </div>
 
         <button id="startBtn">OCR処理を開始する</button>
@@ -311,42 +279,16 @@
         const logArea = document.getElementById('log');
         const resultArea = document.getElementById('result');
         const apiKeyInput = document.getElementById('apiKey');
-        const modelSelect = document.getElementById('modelSelect');
+        const tierSelect = document.getElementById('tierSelect');
         const startPageInput = document.getElementById('startPage');
         const endPageInput = document.getElementById('endPage');
         const copyBtn = document.getElementById('copyBtn');
-        const copyMsg = document.getElementById('copyMsg');
 
         apiKeyInput.value = localStorage.getItem('gemini_api_key') || "";
-        modelSelect.value = localStorage.getItem('gemini_model_choice') || "gemini-3-flash-preview";
-
-        // Show custom input if selected
-        if (modelSelect.value === 'custom') {
-            const customInput = document.getElementById('customModelInput');
-            if (customInput) customInput.style.display = 'block';
-        }
 
         document.getElementById('saveKeyBtn').onclick = () => {
             localStorage.setItem('gemini_api_key', apiKeyInput.value);
-            localStorage.setItem('gemini_model_choice', modelSelect.value);
             alert("設定を保存しました。");
-        };
-
-        copyBtn.onclick = async () => {
-            if (!resultArea.value) return;
-            try {
-                await navigator.clipboard.writeText(resultArea.value);
-                const originalText = copyBtn.innerText;
-                copyBtn.innerText = "✅ コピー完了！";
-                copyBtn.style.backgroundColor = "#28a745";
-
-                setTimeout(() => {
-                    copyBtn.innerText = originalText;
-                    copyBtn.style.backgroundColor = "";
-                }, 2000);
-            } catch (err) {
-                alert("コピーに失敗しました: " + err.message);
-            }
         };
 
         const addLog = (msg, type = '') => {
@@ -359,177 +301,239 @@
             logArea.scrollTop = logArea.scrollHeight;
         };
 
-        // High Precision Prompt (Standardized with Python version)
-        const OCR_PROMPT = `指示：日本古来の縦書き書籍（見開き）の高精度テキスト化
+        // ---------------------------------------------------------
+        // 画像解析ロジック (見開き分割 + 段組判定)
+        // ---------------------------------------------------------
+        async function analyzeLayout(canvas) {
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
 
-1. 読字方向の厳守（最優先）
-この画像は日本語の「縦書き・見開き」レイアウトです。絶対に横方向（左から右）に読まないでください。
-必ず以下の順序でテキスト化してください：
-- まず右のページの、一番右側の行から順に左に向かって（Right-to-Left）下まで読み進める。
-- 右ページがすべて終わったら、次に左ページの、一番右側の行から順に左に向かって読む。
+            // 1. ノド（見開きの中心）を検出して左右に分けるか判定
+            // アスペクト比が 1.2 以上（横長）なら見開きとみなす
+            const isSpread = (w / h > 1.2);
+            const results = [];
 
-2. ノイズの完全排除
-以下の要素は本文の文脈を破壊するため、出力から完全に除外してください：
-- 各ページの上部・下部にあるページ番号（例：169、170）
-- 書籍のタイトルや章名（例：食のフィールドワーカー）などの柱（ヘッダー・フッター）
-- ルビ：ルビは無視し、親文字（本文）のみを抽出してください。
-- 図表
-- 文字間の不自然なスペース
+            if (isSpread) {
+                // 中央40-60%で最も白い（輝度が高い）列を探す
+                const x_min = Math.floor(w * 0.4);
+                const x_max = Math.floor(w * 0.6);
+                const gutterW = x_max - x_min;
+                const gutterData = ctx.getImageData(x_min, 0, gutterW, h).data;
+                
+                const colBrightness = new Float32Array(gutterW);
+                for (let x = 0; x < gutterW; x++) {
+                    let s = 0;
+                    for (let y = 0; y < h; y++) {
+                        const i = (y * gutterW + x) * 4;
+                        s += (765 - (gutterData[i] + gutterData[i+1] + gutterData[i+2]));
+                    }
+                    colBrightness[x] = s;
+                }
 
-3. 段落と改行の扱い
-- 物理的な行末での改行は禁止です。文章は一つの連続した文として連結してください。
-- 改行を行うのは、**「段落が変わる箇所（通常、文頭が一字下がっている箇所）」**および「見出し」の前後のみとしてください。
+                const win = 25; // 窓幅
+                let minVal = Infinity, minIdx = 0, total = 0;
+                for (let i = 0; i < colBrightness.length - win; i++) {
+                    let s = 0; for (let j = 0; j < win; j++) s += colBrightness[i+j];
+                    const v = s / win; total += v;
+                    if (v < minVal) { minVal = v; minIdx = i; }
+                }
+                const avg = total / (colBrightness.length - win);
+                const splitX = x_min + minIdx + Math.floor(win / 2);
 
-4. 出力形式
-出力は純粋なテキスト形式とし、挨拶や解説は一切含めないでください。`;
+                if (minVal < avg * 0.2 && avg > 10) { // 白いノドが平均より十分に白い場合
+                    // 右ページ
+                    const cR = document.createElement('canvas');
+                    cR.width = w - splitX; cR.height = h;
+                    cR.getContext('2d').drawImage(canvas, splitX, 0, w - splitX, h, 0, 0, w - splitX, h);
+                    // 左ページ
+                    const cL = document.createElement('canvas');
+                    cL.width = splitX; cL.height = h;
+                    cL.getContext('2d').drawImage(canvas, 0, 0, splitX, h, 0, 0, splitX, h);
+
+                    const pageBlocks = [];
+                    pageBlocks.push(await splitTopBottom(cR, "右ページ"));
+                    pageBlocks.push(await splitTopBottom(cL, "左ページ"));
+                    results.push(...pageBlocks[0], ...pageBlocks[1]);
+                } else {
+                    // 見開きではない、またはノドが検出できない場合は単一ページとして処理
+                    results.push(...(await splitTopBottom(canvas, "")));
+                }
+            } else {
+                // 単一ページとして処理
+                results.push(...(await splitTopBottom(canvas, "")));
+            }
+            return results;
+        }
+
+        async function splitTopBottom(canvas, prefix) {
+            const w = canvas.width, h = canvas.height;
+            const y_min = Math.floor(h * 0.35), y_max = Math.floor(h * 0.65);
+            const x_min = Math.floor(w * 0.4), x_max = Math.floor(w * 0.6);
+            const regionW = x_max - x_min, regionH = y_max - y_min;
+            const ctx = canvas.getContext('2d');
+            const data = ctx.getImageData(x_min, y_min, regionW, regionH).data;
+
+            const rowSums = new Float32Array(regionH);
+            for (let y = 0; y < regionH; y++) {
+                let s = 0;
+                for (let x = 0; x < regionW; x++) {
+                    const i = (y * regionW + x) * 4;
+                    s += (765 - (data[i] + data[i+1] + data[i+2]));
+                }
+                rowSums[y] = s;
+            }
+
+            const win = 25;
+            let minVal = Infinity, minIdx = 0, total = 0;
+            for (let i = 0; i < rowSums.length - win; i++) {
+                let s = 0; for (let j = 0; j < win; j++) s += rowSums[i+j];
+                const v = s / win; total += v;
+                if (v < minVal) { minVal = v; minIdx = i; }
+            }
+            const avg = total / (rowSums.length - win);
+            const splitY = y_min + minIdx + Math.floor(win / 2);
+
+            if (minVal < avg * 0.2 && avg > 10) {
+                const cT = document.createElement('canvas');
+                cT.width = w; cT.height = splitY;
+                cT.getContext('2d').drawImage(canvas, 0, 0, w, splitY, 0, 0, w, splitY);
+                const cB = document.createElement('canvas');
+                cB.width = w; cB.height = h - splitY;
+                cB.getContext('2d').drawImage(canvas, 0, splitY, w, h - splitY, 0, 0, w, h - splitY);
+                return [
+                    { name: prefix + "上段", base64: cT.toDataURL('image/jpeg', 0.85).split(',')[1] },
+                    { name: prefix + "下段", base64: cB.toDataURL('image/jpeg', 0.85).split(',')[1] }
+                ];
+            }
+ else {
+                return [{ name: "全段", base64: canvas.toDataURL('image/jpeg', 0.85).split(',')[1] }];
+            }
+        }
+
+        const OCR_PROMPT_STRUCTURED = `指示：日本語書籍（縦書き二段組の分割画像）の超高精度テキスト化。
+【規則】
+1. 文章の連結: 改行位置では改行せず、一つの文にしてください。
+2. 段落の保持: 「段落が変わる箇所（一字下げ）」のみ改行してください。
+3. ノイズ除去: ページ番号、ヘッダー、ルビは完全に除外してください。
+返答はテキストのみとしてください。`;
+
+        const OCR_PROMPT_RELAXED = `指示：日本語書籍（縦書き一段組）の超高精度テキスト化。
+【規則】
+1. 文章の連結: 同一内容の改行は連結してください。
+2. 独立した行: タイトルや章名は独立させてください。
+3. ノイズ除去: ページ番号、ヘッダー、ルビは除外してください。
+返答はテキストのみとしてください。`;
 
         document.getElementById('startBtn').onclick = async (e) => {
             const startBtn = e.target;
             const file = document.getElementById('pdfFile').files[0];
-            const key = apiKeyInput.value;
-            const selectedModel = modelSelect.value;
+            const key = apiKeyInput.value.trim();
             if (!file || !key) { alert("PDFとAPIキーが必要です。"); return; }
+
+            const tier = tierSelect.value;
+            const concurrency = (tier === 'paid') ? 20 : 2;
 
             startBtn.disabled = true;
             startBtn.innerText = "⏳ 処理中...";
-            startBtn.style.opacity = "0.7";
-
             logArea.innerHTML = "";
             resultArea.value = "";
 
             try {
                 const genAI = new GoogleGenerativeAI(key);
-                let modelName = selectedModel;
-                if (selectedModel === 'custom') {
-                    const customInput = document.getElementById('customModelInput');
-                    if (customInput && customInput.value) {
-                        modelName = customInput.value.trim();
-                    } else {
-                        alert("カスタムモデル名を入力してください。");
-                        startBtn.disabled = false;
-                        startBtn.innerText = "OCR処理を開始する";
-                        startBtn.style.opacity = "1";
-                        return;
+                const model = genAI.getGenerativeModel({
+                    model: "gemini-3.1-flash-lite-preview",
+                    generationConfig: {
+                        thinkingConfig: { include_thoughts: false, thinking_level: 'low' }
                     }
-                }
-                const model = genAI.getGenerativeModel({ model: modelName });
+                });
 
                 const arrayBuffer = await file.arrayBuffer();
                 const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-
                 const actualStart = Math.max(1, parseInt(startPageInput.value) || 1);
                 const actualEnd = Math.min(pdf.numPages, parseInt(endPageInput.value) || pdf.numPages);
+                const pageNumbers = [];
+                for (let i = actualStart; i <= actualEnd; i++) pageNumbers.push(i);
 
-                // Get Layout Setting
-                const layout = document.querySelector('input[name="layout"]:checked').value;
+                addLog(`[高速エンジン] 起動 (合計: ${pageNumbers.length}枚 / 並列: ${concurrency} / 先行レンダリング有効)`, 'success');
 
-                for (let i = actualStart; i <= actualEnd; i++) {
-                    addLog(`[${i}/${actualEnd}] ページ処理中...`);
-                    const page = await pdf.getPage(i);
-                    const viewport = page.getViewport({ scale: 2.5 });
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    canvas.height = viewport.height;
-                    canvas.width = viewport.width;
-                    await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+                const resultsArray = new Array(pageNumbers.length);
+                let completedCount = 0;
+                let currentPageIdx = 0;
 
-                    let imagesToProcess = [];
+                const processNextPage = async () => {
+                    while (currentPageIdx < pageNumbers.length) {
+                        const currentIndex = currentPageIdx++;
+                        const pageNum = pageNumbers[currentIndex];
 
-                    if (layout === 'two-column') {
-                        // === 二段組（分割あり） ===
-                        // ノド元で左右が繋がってしまうのを防ぐため、物理的に分割して処理する
-                        const mid = canvas.width / 2;
-                        const margin = Math.floor(canvas.width * 0.05);
+                        try {
+                            const page = await pdf.getPage(pageNum);
+                            const viewport = page.getViewport({ scale: 2.5 });
+                            const canvas = document.createElement('canvas');
+                            canvas.height = viewport.height;
+                            canvas.width = viewport.width;
+                            const renderContext = { canvasContext: canvas.getContext('2d'), viewport: viewport };
+                            await page.render(renderContext).promise;
 
-                        // 右側
-                        const sCanvasRight = document.createElement('canvas');
-                        sCanvasRight.width = canvas.width - (mid - margin);
-                        sCanvasRight.height = canvas.height;
-                        sCanvasRight.getContext('2d').drawImage(canvas, mid - margin, 0, sCanvasRight.width, canvas.height, 0, 0, sCanvasRight.width, canvas.height);
+                            const images = await analyzeLayout(canvas);
+                            let combinedText = `\n--- Page ${pageNum} ---\n`;
 
-                        // 左側
-                        const sCanvasLeft = document.createElement('canvas');
-                        sCanvasLeft.width = mid + margin;
-                        sCanvasLeft.height = canvas.height;
-                        sCanvasLeft.getContext('2d').drawImage(canvas, 0, 0, sCanvasLeft.width, canvas.height, 0, 0, sCanvasLeft.width, canvas.height);
-
-                        imagesToProcess.push({ name: "右側", base64: sCanvasRight.toDataURL('image/jpeg', 0.8).split(',')[1] });
-                        imagesToProcess.push({ name: "左側", base64: sCanvasLeft.toDataURL('image/jpeg', 0.8).split(',')[1] });
-
-                    } else {
-                        // === 一段組（分割なし） ===
-                        // Python版と同様、見開き全体を渡しプロンプトでRTL制御する方式を推奨
-                        const base64Data = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
-                        imagesToProcess.push({ name: "見開き全体", base64: base64Data });
-                    }
-
-                    let pageText = `--- Page ${i} ---\n`;
-                    for (const imgData of imagesToProcess) {
-
-                        // Replace prompt placeholder
-                        const prompt = OCR_PROMPT.replace('{side}', imgData.name);
-
-                        // === リトライロジック ===
-                        let success = false;
-                        let maxRetries = 3;
-                        for (let attempt = 0; attempt < maxRetries; attempt++) {
-                            try {
-                                const result = await model.generateContent([{ inlineData: { data: imgData.base64, mimeType: "image/jpeg" } }, prompt]);
-                                pageText += result.response.text() + "\n";
-                                success = true;
-                                break;
-                            } catch (err) {
-                                const msg = err.message || "";
-                                if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
-                                    const waitSec = 5 * (attempt + 1);
-                                    addLog(`  [!] API制限（429）が発生しました。${waitSec}秒待機して再試行します (${attempt + 1}/${maxRetries})`, 'retry');
-                                    await new Promise(r => setTimeout(r, waitSec * 1000));
-                                } else if (msg.includes("503") || msg.includes("UNAVAILABLE")) {
-                                    const waitSec = 5 * (attempt + 1);
-                                    addLog(`  [!] サーバーが一時的に混雑しています。${waitSec}秒待機して再試行します (${attempt + 1}/${maxRetries})`, 'retry');
-                                    await new Promise(r => setTimeout(r, waitSec * 1000));
-                                } else if (msg.includes("API_KEY_INVALID") || msg.includes("key is invalid")) {
-                                    addLog(`  [x] APIキーが無効です。設定を見直してください。`, 'error');
-                                    break;
-                                } else {
-                                    addLog(`  [x] ${imgData.name}でエラーが発生しました: ${msg.substring(0, 100)}`, 'error');
-                                    break;
+                            for (const img of images) {
+                                const prompt = (img.name === "全段") ? OCR_PROMPT_RELAXED : OCR_PROMPT_STRUCTURED;
+                                let retryCount = 0;
+                                while (retryCount < 3) {
+                                    try {
+                                        const res = await model.generateContent([{ inlineData: { data: img.base64, mimeType: "image/jpeg" } }, prompt]);
+                                        combinedText += (res.response.text() || "") + "\n";
+                                        break;
+                                    } catch (err) {
+                                        if (err.message.includes("429") || err.message.includes("quota")) {
+                                            retryCount++;
+                                            const delay = 5000 * retryCount;
+                                            addLog(`  [!] Page ${pageNum}: 待機中 (${delay / 1000}s)...`, 'retry');
+                                            await new Promise(r => setTimeout(r, delay));
+                                        } else { throw err; }
+                                    }
                                 }
                             }
+                            resultsArray[currentIndex] = combinedText;
+                            completedCount++;
+                            addLog(`[${completedCount}/${pageNumbers.length}] Page ${pageNum} 完了`, 'success');
+                        } catch (err) {
+                            addLog(`  [x] Page ${pageNum} エラー: ${err.message}`, 'error');
+                            resultsArray[currentIndex] = `\n[[ERROR PAGE ${pageNum}: ${err.message}]]\n`;
+                            completedCount++;
                         }
-                        await new Promise(r => setTimeout(r, 100));
                     }
-                    resultArea.value += pageText + "\n";
-                    resultArea.scrollTop = resultArea.scrollHeight;
-                    addLog(`[${i}/${actualEnd}] 完了`, 'success');
+                };
+
+                const workers = [];
+                for (let i = 0; i < Math.min(concurrency, pageNumbers.length); i++) {
+                    workers.push(processNextPage());
                 }
+                await Promise.all(workers);
+
+                resultArea.value = resultsArray.join("");
                 addLog("すべての処理が完了しました。", 'success');
+
             } catch (err) {
-                const msg = err.message || "";
-                if (msg.includes("API_KEY_INVALID")) {
-                    addLog("重大なエラー: APIキーが正しくないか、設定されていません。", "error");
-                } else if (msg.includes("PDF")) {
-                    addLog("重大なエラー: PDFファイルの読み込みに失敗しました。", "error");
-                } else {
-                    addLog("重大なエラーが発生しました: " + msg, "error");
-                }
+                addLog("重大なエラーが発生しました: " + err.message, "error");
             } finally {
-                const startBtn = document.getElementById('startBtn');
                 startBtn.disabled = false;
                 startBtn.innerText = "OCR処理を開始する";
-                startBtn.style.opacity = "1";
             }
         };
 
-        // Model Custom Input Toggle
-        modelSelect.addEventListener('change', (e) => {
-            const customInput = document.getElementById('customModelInput');
-            if (e.target.value === 'custom') {
-                customInput.style.display = 'block';
-            } else {
-                customInput.style.display = 'none';
-            }
-        });
+        // コピー機能
+        copyBtn.onclick = async () => {
+            if (!resultArea.value) return;
+            try {
+                await navigator.clipboard.writeText(resultArea.value);
+                const originalText = copyBtn.innerText;
+                copyBtn.innerText = "✅ コピー完了！";
+                setTimeout(() => { copyBtn.innerText = originalText; }, 2000);
+            } catch (err) { alert("コピーに失敗しました"); }
+        };
 
     </script>
 </body>

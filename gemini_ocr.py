@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import asyncio
 import argparse
@@ -129,7 +130,7 @@ def split_vertical_or_full(
     if is_two_column:
         img_top = page_img.crop((0, 0, w, split_y))
         img_bottom = page_img.crop((0, split_y, w, h))
-
+ 
         top_path = out_dir / f"{page_stem}_{side_label}_Top.jpg"
         bot_path = out_dir / f"{page_stem}_{side_label}_Bottom.jpg"
         img_top.save(top_path, "JPEG", quality=95)
@@ -145,12 +146,12 @@ def split_vertical_or_full(
     return paths, label
 
 
-def extract_images_to_list(pdf_path: Path, temp_dir: Path, dpi: int = 300) -> list[Path]:
+def extract_images_to_list(pdf_path: Path, temp_dir: Path, dpi: int) -> list[Path]:
     """
     PDFを画像化し、各見開きを以下の手順で処理する:
-      Step1: ノド検出で右ページ・左ページに分割（常時）
-      Step2: 各ページで二段組/一段組を自動判定し分割（ページごと独立）
-    読み順: 右Top→右Bottom（or 右Full）→左Top→左Bottom（or 左Full）
+      Step1: ノド検出で右ページ・左ページに分割
+      Step2: 各ページで二段組/一段組を自動判定し分割
+    読み順: 右Top -> 右Bottom -> 左Top -> 左Bottom
     """
     print(f"[{datetime.now().strftime('%H:%M:%S')}] PDF画像変換中 (DPI: {dpi})...")
 
@@ -180,14 +181,11 @@ def extract_images_to_list(pdf_path: Path, temp_dir: Path, dpi: int = 300) -> li
 
             stem = spread_path.stem
 
-            # --- Step 2: 右ページの自動判定・分割 ---
+            # --- Step 2: 右・左ページの順で分割 ---
             r_paths, r_label = split_vertical_or_full(img_right, stem, "R", temp_dir)
-            print(f"  見開き {i+1:03} 右ページ: {r_label}")
-            final_paths.extend(r_paths)
-
-            # --- Step 2: 左ページの自動判定・分割 ---
             l_paths, l_label = split_vertical_or_full(img_left, stem, "L", temp_dir)
-            print(f"  見開き {i+1:03} 左ページ: {l_label}")
+            print(f"  見開き {i+1:03}: 右={r_label}, 左={l_label}")
+            final_paths.extend(r_paths)
             final_paths.extend(l_paths)
 
         spread_path.unlink()  # ディスク節約
@@ -212,7 +210,7 @@ async def call_gemini_async_with_retry(client, image_path: Path, prompt: str, pa
                 
                 generate_config = types.GenerateContentConfig(
                     temperature=0.0,
-                    thinking_config=types.ThinkingConfig(thinking_level="HIGH")
+                    thinking_config=types.ThinkingConfig(thinking_level="LOW")
                 )
                 
                 # ストリーミングでTTFTを計測しつつ全体を取得
@@ -231,9 +229,9 @@ async def call_gemini_async_with_retry(client, image_path: Path, prompt: str, pa
                     if chunk.text:
                         full_text.append(chunk.text)
                 
-                end_time = time.time()
-                ttft = (first_token_time - start_time) if first_token_time is not None else 0
-                duration = end_time - start_time
+                end_time = float(time.time())
+                ttft_val = (first_token_time - start_time) if isinstance(first_token_time, float) else 0.0
+                duration_val = end_time - start_time
                 
                 usage = ""
                 if hasattr(chunk, 'usage_metadata') and chunk.usage_metadata:
@@ -242,19 +240,25 @@ async def call_gemini_async_with_retry(client, image_path: Path, prompt: str, pa
 
                 final_text = "".join(full_text)
                 if final_text:
-                    print(f"  [OK] Page {page_num:02} ({side}): TTFT={ttft:.2f}s, Total={duration:.1f}s{usage}")
+                    print(f"  [OK] Page {page_num:02} ({side}): TTFT={ttft_val:.2f}s, Total={duration_val:.1f}s{usage}")
                     return final_text
                 return ""
 
         except Exception as e:
             err_msg = str(e)
             if any(code in err_msg for code in ["429", "RESOURCE_EXHAUSTED"]):
-                wait_sec = (2 ** attempt) + 5
-                print(f"  [!] Page {page_num} ({side}): レート制限 (429)。{wait_sec}秒待機... ({attempt+1}/5)")
+                # エラーメッセージから待機秒数を探す (例: "retry in 10s" or "after 10s")
+                match = re.search(r'(?:retry in |after )(\d+)', err_msg)
+                if match:
+                    wait_sec = int(match.group(1)) + 1
+                    print(f"  [!] Page {page_num} ({side}): クォータ制限。API指示に従い {wait_sec}秒待機...")
+                else:
+                    wait_sec = (2 ** attempt) + 10
+                    print(f"  [!] Page {page_num} ({side}): レート制限 (429)。{wait_sec}秒待機... ({attempt+1}/5)")
                 await asyncio.sleep(wait_sec)
             elif any(code in err_msg for code in ["500", "503", "504"]):
-                wait_sec = 2
-                print(f"  [!] Page {page_num} ({side}): サーバーエラー({err_msg[:20]}...)。再試行します。")
+                wait_sec = 5
+                print(f"  [!] Page {page_num} ({side}): サーバーエラー({err_msg[:20]}...)。{wait_sec}秒後に再試行")
                 await asyncio.sleep(wait_sec)
             else:
                 print(f"  [x] Page {page_num} ({side}): 致命的なエラー: {e}")
@@ -292,6 +296,7 @@ def parse_side_label(img_path: Path) -> tuple[str, bool]:
 def parse_args():
     parser = argparse.ArgumentParser(description="Gemini APIを使用した高機能OCR（レイアウト全自動判定版）")
     parser.add_argument("input_pdf", nargs="?", help="入力PDFファイルのパス")
+    parser.add_argument("--free", action="store_true", help="無料枠制限 (15 RPM) で実行する（デフォルトは有料版想定の高速モード）")
     return parser.parse_args()
 
 
@@ -316,44 +321,63 @@ async def main_async():
 
     client = genai.Client(api_key=API_KEY)
 
+    # ティアに応じたレート制限設定
+    if args.free:
+        rpm_limit = 15
+        concurrency = 3
+        tier_label = "無料枠 (Standard)"
+    else:
+        # 有料版 (Tier 2/3) 想定: 3.1 Flash Lite は 4,000 RPM だが、安全のため 2,000 に設定
+        rpm_limit = 2000
+        concurrency = 20
+        tier_label = "有料版 (Paid/Pro) 高速モード"
+
     print(f"\n--- 処理開始: {input_path.name} ---")
-    print(f"--- モード: レイアウト全自動判定（ノド分割 + 二段組閾値={TWO_COLUMN_THRESHOLD}） ---")
+    print(f"--- モード: レイアウト全自動判定（二段組閾値={TWO_COLUMN_THRESHOLD}） ---")
+    print(f"--- ティア: {tier_label} (同時実行: {concurrency}, 制限: {rpm_limit} RPM) ---")
     print(f"--- 出力先: {output_path} ---\n")
 
-    # レート制限（1分間に15リクエスト）
-    limiter = AsyncLimiter(15, 60)
+    # レート制限
+    limiter = AsyncLimiter(rpm_limit, 60)
 
     # OOM保護のため一時ディレクトリで作業
     with tempfile.TemporaryDirectory() as temp_dir_str:
         temp_dir = Path(temp_dir_str)
 
         image_paths = extract_images_to_list(input_path, temp_dir, DPI)
-        total_items = len(image_paths)
-        print(f"\n[{datetime.now().strftime('%H:%M:%S')}] OCR処理開始: 計{total_items}画像\n")
+        total_items = int(len(image_paths))
+        print(f"\n[{datetime.now().strftime('%H:%M:%S')}] OCR処理開始: 計{total_items}画像を並行処理\n")
 
-        page_group = 0
-        with open(output_path, "w", encoding="utf-8") as f:
-            for i, img_path in enumerate(image_paths):
-                current_num = i + 1
-                side_label, is_group_start = parse_side_label(img_path)
+        # 同時実行数を制限するセマフォ
+        sem = asyncio.Semaphore(concurrency)
 
-                if is_group_start:
-                    page_group += 1
-                    f.write(f"\n\n--- Page Group {page_group} ---\n")
-
-                print(f"[{current_num}/{total_items}] OCR処理中: {side_label}")
-
-                # ラベルに応じてプロンプトを切り替え
-                is_two_col = "二段組" in side_label
-                current_prompt = OCR_PROMPT_STRUCTURED if is_two_col else OCR_PROMPT_RELAXED
-
-                text = await call_gemini_async_with_retry(
-                    client, img_path, current_prompt, current_num, side_label, limiter
+        async def sem_task(img_p, prompt, num, label):
+            async with sem:
+                return await call_gemini_async_with_retry(
+                    client, img_p, prompt, num, label, limiter
                 )
 
+        # 全タスクを生成
+        tasks = []
+        for i, img_path in enumerate(image_paths):
+            side_label, _ = parse_side_label(img_path)
+            is_two_col = "二段組" in side_label
+            current_prompt = OCR_PROMPT_STRUCTURED if is_two_col else OCR_PROMPT_RELAXED
+            tasks.append(sem_task(img_path, current_prompt, i + 1, side_label))
+
+        # 並列実行して結果を待機
+        results = await asyncio.gather(*tasks)
+
+        # 順序通りにファイル書き出し
+        page_group_count: int = 0
+        with open(output_path, "w", encoding="utf-8") as f:
+            for i, (img_path, text) in enumerate(zip(image_paths, results)):
+                _, is_group_start = parse_side_label(img_path)
+                if is_group_start:
+                    page_group_count += 1
+                    f.write(f"\n\n--- Page Group {page_group_count} ---\n")
                 f.write(text + "\n")
                 f.flush()
-                await asyncio.sleep(0.05)
 
     print(f"\n[完了] 結果: {output_path}")
 
