@@ -1,0 +1,6 @@
+numpy
+Pillow
+pdf2image
+google-genai
+aiolimiter
+python-dotenv

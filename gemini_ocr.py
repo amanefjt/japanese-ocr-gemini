@@ -109,9 +109,12 @@ def split_vertical_or_full(
         split_y = y_min + split_idx_relative
         inv_min = center_row_sums.min()
 
+    # 段間(ギャップ)の位置を特定 
+    split_idx = split_idx_relative + (window // 2 if len(center_row_sums) >= window else 0)
+    
     # 段間（最小値の行）の上下それぞれで平均の文字密度を計算
-    top_avg = center_row_sums[:split_idx_relative].mean() if split_idx_relative > 0 else 0
-    bottom_avg = center_row_sums[split_idx_relative:].mean() if split_idx_relative < len(center_row_sums) else 0
+    top_avg = center_row_sums[:split_idx].mean() if split_idx > 0 else 0
+    bottom_avg = center_row_sums[split_idx:].mean() if split_idx < len(center_row_sums) else 0
 
     inv_avg = center_row_sums.mean()
 
