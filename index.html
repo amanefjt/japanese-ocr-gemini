@@ -310,38 +310,43 @@
             const h = canvas.height;
 
             // 1. ノド（見開きの中心）を検出して左右に分けるか判定
-            // アスペクト比が 1.2 以上（横長）なら見開きとみなす
-            const isSpread = (w / h > 1.2);
+            // アスペクト比が 1.1 以上（横長）なら見開き候補とみなす
+            const isSpreadAspect = (w / h > 1.1);
             const results = [];
 
-            if (isSpread) {
+            if (isSpreadAspect) {
                 // 中央40-60%で最も白い（輝度が高い）列を探す
                 const x_min = Math.floor(w * 0.4);
                 const x_max = Math.floor(w * 0.6);
                 const gutterW = x_max - x_min;
                 const gutterData = ctx.getImageData(x_min, 0, gutterW, h).data;
                 
-                const colBrightness = new Float32Array(gutterW);
+                const colBlackness = new Float32Array(gutterW);
                 for (let x = 0; x < gutterW; x++) {
                     let s = 0;
                     for (let y = 0; y < h; y++) {
                         const i = (y * gutterW + x) * 4;
+                        // 輝度を反転 (白=0, 黒=255) して合計
                         s += (765 - (gutterData[i] + gutterData[i+1] + gutterData[i+2]));
                     }
-                    colBrightness[x] = s;
+                    colBlackness[x] = s / h; // 1ピクセルあたりの平均黒色度
                 }
 
-                const win = 25; // 窓幅
+                const win = 15; // 窓幅を少し狭める
                 let minVal = Infinity, minIdx = 0, total = 0;
-                for (let i = 0; i < colBrightness.length - win; i++) {
-                    let s = 0; for (let j = 0; j < win; j++) s += colBrightness[i+j];
+                for (let i = 0; i < colBlackness.length - win; i++) {
+                    let s = 0; for (let j = 0; j < win; j++) s += colBlackness[i+j];
                     const v = s / win; total += v;
                     if (v < minVal) { minVal = v; minIdx = i; }
                 }
-                const avg = total / (colBrightness.length - win);
+                const avg = total / (colBlackness.length - win);
                 const splitX = x_min + minIdx + Math.floor(win / 2);
 
-                if (minVal < avg * 0.2 && avg > 10) { // 白いノドが平均より十分に白い場合
+                // 信頼性判定 (Safety First): 
+                // 最も白い部分が平均より十分に白い (20%未満) かつ、全体として白すぎない
+                const isReliable = (minVal < avg * 0.2) && (avg > 10);
+
+                if (isReliable) {
                     // 右ページ
                     const cR = document.createElement('canvas');
                     cR.width = w - splitX; cR.height = h;
@@ -356,11 +361,11 @@
                     pageBlocks.push(await splitTopBottom(cL, "左ページ"));
                     results.push(...pageBlocks[0], ...pageBlocks[1]);
                 } else {
-                    // 見開きではない、またはノドが検出できない場合は単一ページとして処理
+                    // 見開きモードであっても、ノドが不鮮明なら安全のために単体として処理
                     results.push(...(await splitTopBottom(canvas, "")));
                 }
             } else {
-                // 単一ページとして処理
+                // 単体ページ
                 results.push(...(await splitTopBottom(canvas, "")));
             }
             return results;
@@ -411,19 +416,15 @@
             }
         }
 
-        const OCR_PROMPT_STRUCTURED = `指示：日本語書籍（縦書き二段組の分割画像）の超高精度テキスト化。
-【規則】
-1. 文章の連結: 改行位置では改行せず、一つの文にしてください。
-2. 段落の保持: 「段落が変わる箇所（一字下げ）」のみ改行してください。
-3. ノイズ除去: ページ番号、ヘッダー、ルビは完全に除外してください。
-返答はテキストのみとしてください。`;
+        const OCR_PROMPT_STRUCTURED = `画像を読み取り、内容を正確にテキスト化してください。
+レイアウト（一段組、二段組など）を認識し、適切な順序で出力してください。
+ページ内の要素（図表、注釈）も文脈に合わせて配置してください。
+余計な解説や要約は含めず、本文のみを抽出してください。`;
 
-        const OCR_PROMPT_RELAXED = `指示：日本語書籍（縦書き一段組）の超高精度テキスト化。
-【規則】
-1. 文章の連結: 同一内容の改行は連結してください。
-2. 独立した行: タイトルや章名は独立させてください。
-3. ノイズ除去: ページ番号、ヘッダー、ルビは除外してください。
-返答はテキストのみとしてください。`;
+        const OCR_PROMPT_RELAXED = `画像を読み取り、内容を正確にテキスト化してください。
+レイアウトを認識し、適切な順序で出力してください。
+もし見開き画像（2ページ並んでいる）であれば、右のページから先に、左のページをその後に読み取ってください。
+余計な解説や要約は含めず、本文のみを抽出してください。`;
 
         document.getElementById('startBtn').onclick = async (e) => {
             const startBtn = e.target;

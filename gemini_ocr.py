@@ -60,16 +60,37 @@ OCR_PROMPT_RELAXED = """指示：日本語書籍（縦書き一段組・扉絵�
 # ================= 1. 画像処理モジュール =================
 TWO_COLUMN_THRESHOLD = 0.2  # 修正: 最も黒要素が少ない行が、平均黒要素の20%未満なら段間として判定する
 
-def find_gutter_x(img_array: np.ndarray) -> int:
+def find_gutter_x(img_array: np.ndarray) -> tuple[int, bool]:
     """
     見開き画像のノド（綴じ目）のX座標を検出する。
     幅の40%〜60%の範囲で、最もインクが少ない（白い）列を探す。
+    戻り値: (split_x, is_reliable)
     """
     height, width = img_array.shape
     x_min = int(width * 0.40)
     x_max = int(width * 0.60)
-    col_sums = np.sum(img_array[:, x_min:x_max], axis=0)
-    return x_min + int(np.argmax(col_sums))
+    
+    # 列ごとの輝度合計（白=高, 黒=低）
+    col_sums = np.sum(img_array[:, x_min:x_max], axis=0).astype(float)
+    
+    # 移動平均でノイズ除去
+    window = 20
+    if len(col_sums) > window:
+        smoothed = np.convolve(col_sums, np.ones(window)/window, mode='valid')
+        relative_idx = np.argmax(smoothed)
+        max_val = smoothed.max()
+        split_x = x_min + int(relative_idx) + window // 2
+    else:
+        relative_idx = np.argmax(col_sums)
+        max_val = col_sums.max()
+        split_x = x_min + int(relative_idx)
+
+    # 信頼性判定: 最も白い列が平均より十分に白いか (1.1倍以上)
+    avg_val = col_sums.mean()
+    # 隙間（白）が平均より明らかに明るい場合を「信頼できるノド」とする
+    is_reliable = (max_val > avg_val * 1.1) and (avg_val < 250 * height)
+    
+    return split_x, is_reliable
 
 
 def split_vertical_or_full(
@@ -149,20 +170,24 @@ def split_vertical_or_full(
     return paths, label
 
 
-def extract_images_to_list(pdf_path: Path, temp_dir: Path, dpi: int) -> list[Path]:
+def extract_images_to_list(pdf_path: Path, temp_dir: Path, dpi: int, 
+                          force_single: bool = False,
+                          force_spread: bool = False,
+                          start_page: int = 1,
+                          end_page: int | None = None) -> list[Path]:
     """
     PDFを画像化し、各見開きを以下の手順で処理する:
-      Step1: ノド検出で右ページ・左ページに分割
+      Step1: アスペクト比とノド検出で右ページ・左ページに分割するか判定
       Step2: 各ページで二段組/一段組を自動判定し分割
     読み順: 右Top -> 右Bottom -> 左Top -> 左Bottom
     """
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] PDF画像変換中 (DPI: {dpi})...")
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] PDF画像変換中 (DPI: {dpi}, Pages: {start_page}-{end_page or 'End'})...")
 
     img_paths = convert_from_path(
         str(pdf_path),
         dpi=dpi,
-        first_page=START_PAGE,
-        last_page=END_PAGE,
+        first_page=start_page,
+        last_page=end_page,
         output_folder=str(temp_dir),
         fmt="jpeg",
         paths_only=True,
@@ -176,20 +201,41 @@ def extract_images_to_list(pdf_path: Path, temp_dir: Path, dpi: int) -> list[Pat
         with Image.open(spread_path) as img:
             img_array = np.array(img.convert("L"))
             height, width = img_array.shape
-
-            # --- Step 1: ノドで左右分割 ---
-            split_x = find_gutter_x(img_array)
-            img_right = img.crop((split_x, 0, width, height))
-            img_left = img.crop((0, 0, split_x, height))
-
+            
+            # アスペクト比による判定 (修正: 1.1以上なら見開き候補とする)
+            is_spread_aspect = (width / height > 1.1)
+            
+            do_split = False
+            split_x = width // 2
+            
+            # force_spread が True ならアスペクト比を無視
+            # ただし force_single が優先
+            if not force_single and (is_spread_aspect or force_spread):
+                # --- Step 1: ノドで左右分割 ---
+                split_x, is_reliable = find_gutter_x(img_array)
+                if is_reliable:
+                    do_split = True
+                else:
+                    msg = "アスペクト比で見開きと判定されましたが、" if is_spread_aspect else "--spread 指定されましたが、"
+                    print(f"  見開き {i+1:03}: [安全策] {msg}明確なノドが不鮮明なため、文字断裁を防ぐため分割をスキップします。")
+            
             stem = spread_path.stem
-
-            # --- Step 2: 右・左ページの順で分割 ---
-            r_paths, r_label = split_vertical_or_full(img_right, stem, "R", temp_dir)
-            l_paths, l_label = split_vertical_or_full(img_left, stem, "L", temp_dir)
-            print(f"  見開き {i+1:03}: 右={r_label}, 左={l_label}")
-            final_paths.extend(r_paths)
-            final_paths.extend(l_paths)
+            
+            if do_split:
+                img_right = img.crop((split_x, 0, width, height))
+                img_left = img.crop((0, 0, split_x, height))
+                
+                # --- Step 2: 右・左ページの順で段組分割 ---
+                r_paths, r_label = split_vertical_or_full(img_right, stem, "R", temp_dir)
+                l_paths, l_label = split_vertical_or_full(img_left, stem, "L", temp_dir)
+                print(f"  見開き {i+1:03}: 右={r_label}, 左={l_label}")
+                final_paths.extend(r_paths)
+                final_paths.extend(l_paths)
+            else:
+                # 単一ページとして処理
+                paths, label = split_vertical_or_full(img, stem, "F", temp_dir)
+                print(f"  ページ {i+1:03}: {label} (単一ページ扱い)")
+                final_paths.extend(paths)
 
         spread_path.unlink()  # ディスク節約
 
@@ -290,6 +336,12 @@ def parse_side_label(img_path: Path) -> tuple[str, bool]:
         return "左ページ下段（二段組）", False
     elif "_L_Full" in name:
         return "左ページ（一段組）", False
+    elif "_F_Top" in name:
+        return "上段（単一ページ二段組）", True
+    elif "_F_Bottom" in name:
+        return "下段（単一ページ二段組）", False
+    elif "_F_Full" in name:
+        return "（単一ページ一段組）", True
     else:
         return "不明", True
 
@@ -300,6 +352,10 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Gemini APIを使用した高機能OCR（レイアウト全自動判定版）")
     parser.add_argument("input_pdf", nargs="?", help="入力PDFファイルのパス")
     parser.add_argument("--free", action="store_true", help="無料枠制限 (15 RPM) で実行する（デフォルトは有料版想定の高速モード）")
+    parser.add_argument("--single", action="store_true", help="強制的に単一ページモード（分割なし）で実行する")
+    parser.add_argument("--spread", action="store_true", help="強制的に見開きモード（分割あり）で実行する")
+    parser.add_argument("--start", type=int, default=1, help="開始ページ (1開始)")
+    parser.add_argument("--end", type=int, help="終了ページ (省略時は最後まで)")
     return parser.parse_args()
 
 
@@ -347,7 +403,11 @@ async def main_async():
     with tempfile.TemporaryDirectory() as temp_dir_str:
         temp_dir = Path(temp_dir_str)
 
-        image_paths = extract_images_to_list(input_path, temp_dir, DPI)
+        image_paths = extract_images_to_list(input_path, temp_dir, DPI, 
+                                            force_single=args.single,
+                                            force_spread=args.spread,
+                                            start_page=args.start,
+                                            end_page=args.end)
         total_items = int(len(image_paths))
         print(f"\n[{datetime.now().strftime('%H:%M:%S')}] OCR処理開始: 計{total_items}画像を並行処理\n")
 
