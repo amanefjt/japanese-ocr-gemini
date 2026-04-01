@@ -7,6 +7,7 @@ from google import genai
 from google.genai import types
 from aiolimiter import AsyncLimiter
 from models import OCRConfig, ProcessingUnit, OCRResult
+from .tier_manager import tier_manager, GeminiTier
 
 class GeminiExtractor:
     """Gemini API を用いた情報抽出を担当するクラス (Extractor)"""
@@ -14,7 +15,14 @@ class GeminiExtractor:
     def __init__(self, config: OCRConfig):
         self.config = config
         self.client = genai.Client(api_key=config.api_key)
+        # 初期状態の設定（後で動的に参照するように変更を検討）
         self.limiter = AsyncLimiter(config.rpm_limit, 60)
+
+    def _refresh_limiter(self):
+        """TierManager の現在の設定に合わせて Limiter を更新する"""
+        current_rpm = tier_manager.settings.rpm_limit
+        if self.limiter.max_rate != current_rpm:
+            self.limiter = AsyncLimiter(current_rpm, 60)
 
     async def extract_text(self, unit: ProcessingUnit, sem: asyncio.Semaphore) -> OCRResult:
         """Gemini APIを呼び出し、テキストを取得する"""
@@ -75,6 +83,10 @@ class GeminiExtractor:
             except Exception as e:
                 err_msg = str(e)
                 if any(code in err_msg for code in ["429", "RESOURCE_EXHAUSTED"]):
+                    # ティアマネージャーへ通知（ダウンシフト）
+                    tier_manager.notify_429()
+                    self._refresh_limiter()
+                    
                     match = re.search(r'(?:retry in |after )(\d+)', err_msg)
                     wait_sec = int(match.group(1)) + 1 if match else (2 ** attempt) + 10
                     await asyncio.sleep(wait_sec)

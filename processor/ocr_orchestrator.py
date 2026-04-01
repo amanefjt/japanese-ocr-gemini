@@ -14,6 +14,7 @@ from processor.gemini_extractor import GeminiExtractor
 from processor.result_constructor import ResultConstructor
 from processor.prompts import OCR_PROMPT_STRUCTURED, OCR_PROMPT_RELAXED
 from processor.utils import parse_side_label
+from processor.tier_manager import tier_manager, GeminiTier
 
 class OCROrchestrator:
     """OCR処理全体を統括するクラス (Orchestrator)"""
@@ -32,6 +33,13 @@ class OCROrchestrator:
             
             # 1. PDFから画像抽出と判定
             print(f"[{datetime.now().strftime('%H:%M:%S')}] PDF画像変換・レイアウト分析中...")
+            
+            # 初期ティアの設定
+            if self.config.is_free_tier:
+                tier_manager.set_tier(GeminiTier.FREE)
+            else:
+                tier_manager.set_tier(GeminiTier.PAID)
+
             units = self._prepare_processing_units(
                 input_pdf, temp_dir, force_single, force_spread
             )
@@ -42,11 +50,14 @@ class OCROrchestrator:
 
             # 2. OCR抽出 (Gemini API / 順次文脈引き継ぎ)
             print(f"[{datetime.now().strftime('%H:%M:%S')}] OCR処理開始: 計{len(units)}画像を文脈を維持して順次処理\n")
-            sem = asyncio.Semaphore(self.config.concurrency)
             
             results = []
             prev_text = ""
             for i, unit in enumerate(units):
+                # 最新のティア設定に基づきセマフォを動的に取得
+                settings = tier_manager.settings
+                sem = asyncio.Semaphore(settings.concurrency)
+                
                 # 1つ前のユニットの末尾テキストを文脈としてセット
                 # (見開きの右ページ -> 左ページ、または前ページ -> 次ページ)
                 # ただし、前ページが存在しない場合は空文字
