@@ -1,0 +1,90 @@
+import asyncio
+import re
+import time
+from pathlib import Path
+from typing import Optional
+from google import genai
+from google.genai import types
+from aiolimiter import AsyncLimiter
+from models import OCRConfig, ProcessingUnit, OCRResult
+
+class GeminiExtractor:
+    """Gemini API を用いた情報抽出を担当するクラス (Extractor)"""
+    
+    def __init__(self, config: OCRConfig):
+        self.config = config
+        self.client = genai.Client(api_key=config.api_key)
+        self.limiter = AsyncLimiter(config.rpm_limit, 60)
+
+    async def extract_text(self, unit: ProcessingUnit, sem: asyncio.Semaphore) -> OCRResult:
+        """Gemini APIを呼び出し、テキストを取得する"""
+        result = OCRResult(unit=unit)
+        
+        for attempt in range(5):
+            try:
+                with open(unit.image_path, "rb") as f:
+                    image_data = f.read()
+                
+                async with sem:
+                    async with self.limiter:
+                        start_time = time.time()
+                        first_token_time = None
+                        full_text = []
+                        
+                        # プロンプトを文脈付きでフォーマット
+                        formatted_prompt = unit.prompt.format(prev_context=unit.prev_context)
+                        
+                        generate_config = types.GenerateContentConfig(
+                            temperature=0.0,
+                            thinking_config=types.ThinkingConfig(thinking_level="LOW")
+                        )
+                        
+                        stream = await self.client.aio.models.generate_content_stream(
+                            model=self.config.model_id,
+                            contents=[
+                                formatted_prompt,
+                                types.Part.from_bytes(data=image_data, mime_type="image/jpeg")
+                            ],
+                            config=generate_config
+                        )
+                        
+                        async for chunk in stream:
+                            if first_token_time is None:
+                                first_token_time = time.time()
+                            if chunk.text:
+                                full_text.append(chunk.text)
+                        
+                        end_time = time.time()
+                        result.ttft = (first_token_time - start_time) if first_token_time else 0.0
+                        result.duration = end_time - start_time
+                        
+                        if hasattr(chunk, 'usage_metadata') and chunk.usage_metadata:
+                            m = chunk.usage_metadata
+                            result.prompt_tokens = m.prompt_token_count
+                            result.candidate_tokens = m.candidates_token_count
+
+                        result.text = "".join(full_text)
+                        if result.text:
+                            result.status = "OK"
+                            return result
+                        
+                        result.status = "ERROR"
+                        result.error_message = "Empty response"
+                        return result
+
+            except Exception as e:
+                err_msg = str(e)
+                if any(code in err_msg for code in ["429", "RESOURCE_EXHAUSTED"]):
+                    match = re.search(r'(?:retry in |after )(\d+)', err_msg)
+                    wait_sec = int(match.group(1)) + 1 if match else (2 ** attempt) + 10
+                    await asyncio.sleep(wait_sec)
+                elif any(code in err_msg for code in ["500", "503", "504"]):
+                    await asyncio.sleep(5)
+                else:
+                    result.status = "ERROR"
+                    result.error_message = err_msg
+                    return result
+        
+        result.status = "RETRY_FAILED"
+        result.error_message = "All retries failed"
+        return result

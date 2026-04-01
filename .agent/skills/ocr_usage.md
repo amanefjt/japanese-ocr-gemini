@@ -21,16 +21,19 @@ Google Gemini API (Gemini 3 Flash) を使用して、PDF ファイルから高�
 ## 実行手順
 1.  **コマンドライン引数で実行**:
     ```bash
-    python gemini_ocr.py [path/to/your_file.pdf]
+    python gemini_ocr_v2.py [path/to/your_file.pdf] --free
     ```
-    引数を省略した場合は、実行時に入力を求められます。
-2.  **レイアウトの選択**:
-    実行中に、以下の 2 つのモードから選択します。
-    - `1`: 一段組 (見開き全体の OCR)
-    - `2`: 二段組 (左右に分割して OCR)
-3.  **出力**:
-    入力ファイルと同じディレクトリに `[input_filename]_ocr.txt` が生成されます。
+2.  **オプション機能**:
+    - `--free`: 無料枠 (15 RPM / 3並列) のレート制限で実行。
+    - `--single`: 強制的に単一ページモードで実行。
+    - `--spread`: 強制的に見開きモードで実行。
+    - `--start`, `--end`: 開始・終了ページを指定。
+3.  **シーケンシャル文脈 OCR (V3)**:
+    - デフォルトで、前ページの末尾テキストを文脈として提示する高度な抽出が有効になります。
+4.  **出力**:
+    - `[input_filename]_ocr_v2.txt` が生成されます。
 
 ## 注意事項
-- **API 制限**: Resource Exhausted (429) エラーが発生した場合は、スクリプトが自動的にリトライします。
-- **コスト**: Gemini 3 Flash を使用しているため、コスト効率と精度のバランスが取れています。
+- **API 制限**: Resource Exhausted (429) エラーが発生した場合は、自動的に指数バックオフリトライを行います。
+- **コスト**: Gemini Pro 1.5 または Flash を使用し、文脈提示による精度向上を図っています。
+- **依存ライブラリ**: `numpy`, `Pillow`, `pdf2image`, `google-genai`, `aiolimiter`, `python-dotenv` が必要です。
