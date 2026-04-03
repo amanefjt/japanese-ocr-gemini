@@ -237,7 +237,8 @@
             style="margin-top: 15px; background: #f0f7ff; padding: 12px; border-radius: 8px; border: 1px solid #cce5ff;">
             <strong class="label" style="font-size: 0.9em; margin-bottom: 5px;">実行ティア（API制限の選択）</strong>
             <select id="tierSelect" style="margin-bottom: 0;">
-                <option value="free">無料枠ユーザー (15 RPM / 3並列)</option>
+                <option value="free">通常（高速モード）</option>
+                <option value="paid">有料版（超高速モード）</option>
             </select>
         </div>
 
@@ -433,7 +434,7 @@
             if (!file || !key) { alert("PDFとAPIキーが必要です。"); return; }
 
             const tier = tierSelect.value;
-            const concurrency = (tier === 'paid') ? 20 : 2;
+            const concurrency = (tier === 'paid') ? 20 : 3;
 
             startBtn.disabled = true;
             startBtn.innerText = "⏳ 処理中...";
