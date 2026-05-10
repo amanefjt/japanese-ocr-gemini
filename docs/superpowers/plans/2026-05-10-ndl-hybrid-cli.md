@@ -1,5 +1,10 @@
 # NDLハイブリッドOCR（CLI版）実装計画
 
+> **STATUS: CANCELLED — 2026-05-10**
+> 理由: gemini-3.1-flash-lite-preview が安価すぎて50%削減の絶対額が無意味（1000ページ≈¥10）。
+> 現行Gemini画像OCRの精度で十分なため、複雑性増加に見合わないと判断。
+> 精度問題が発生した場合に再検討する。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** NDL OCR Liteで文字認識（無料）→ Geminiにテキストのみ送信して段落整形、という2段階パイプラインをCLI版に追加し、Geminiトークン消費を約50%削減する。
