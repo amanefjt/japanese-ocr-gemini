@@ -40,6 +40,146 @@
             font-size: 1.1em;
         }
 
+        /* モーダル背景 */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 999;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 650px;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+            position: relative;
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, #1e90ff 0%, #40b0ff 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 12px 12px 0 0;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: 1.4em;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 28px;
+            cursor: pointer;
+            padding: 0;
+            width: auto;
+            margin-left: 10px;
+        }
+
+        .modal-close:hover {
+            opacity: 0.8;
+            background: none;
+            transform: none;
+        }
+
+        .modal-body {
+            padding: 25px;
+        }
+
+        .modal-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 0.95em;
+            line-height: 1.6;
+        }
+
+        .modal-section.success {
+            background: #e6f7e6;
+            border-left: 4px solid #34c759;
+        }
+
+        .modal-section.success strong {
+            color: #0d6d34;
+        }
+
+        .modal-section.info {
+            background: #e3f2fd;
+            border-left: 4px solid #1976d2;
+        }
+
+        .modal-section.info strong {
+            color: #003d99;
+        }
+
+        .modal-section.warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+        }
+
+        .modal-section.warning strong {
+            color: #856404;
+        }
+
+        .modal-section.danger {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+        }
+
+        .modal-section.danger strong {
+            color: #721c24;
+        }
+
+        .modal-section ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+
+        .modal-section li {
+            margin-bottom: 8px;
+        }
+
+        .modal-section a {
+            color: #0071e3;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .modal-section a:hover {
+            text-decoration: underline;
+        }
+
+        .info-link {
+            cursor: pointer;
+            color: #0071e3;
+            text-decoration: underline;
+            font-weight: 600;
+        }
+
+        .info-link:hover {
+            color: #0077ed;
+        }
+
         .important-note {
             font-size: 0.85em;
             color: #1d1d1f;
@@ -220,13 +360,58 @@
 
         <div class="important-note">
             このツールはGemini APIの<strong>無料枠内で使えます。</strong><br><br>
-            🔑 <strong>Gemini APIキーについて:</strong> <a href="https://aistudio.google.com/app/apikey"
-                target="_blank">Google AI
-                Studio</a>で取得できます。無料枠で利用可能なツールですが、Googleの仕様上、<strong>支払い手段の登録が必要</strong>です。登録したAPIはローカルに保存され、ツール制作者には見られません。<br>
-            ⚠️ <strong>学習への利用について:</strong>
-            無料枠で取得したAPIキーを使用する場合、入力したデータはGoogleのモデル改善のために学習に利用される可能性があります。機密性の高い資料を扱う際はご注意ください。
+            <span class="info-link" id="apiKeyInfoLink">🔑 Gemini APIキーについて</span> をご覧ください。
         </div>
         <button id="saveKeyBtn">設定を保存する</button>
+    </div>
+
+    <!-- モーダルウィンドウ -->
+    <div class="modal-overlay" id="apiKeyModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🔑 Gemini APIキーについて</h3>
+                <button class="modal-close" id="closeModalBtn">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-section success">
+                    <strong>✓ 無料で使えます</strong>
+                    <div style="margin-top: 8px;">
+                        <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>で取得できます。Gmailアカウントだけで始められます。
+                    </div>
+                </div>
+
+                <div class="modal-section info">
+                    <strong>📋 APIキーの取得手順</strong>
+                    <ol>
+                        <li><a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>をGmailで開く</li>
+                        <li>「APIキーを作成」ボタンをクリック</li>
+                        <li>「新しいプロジェクトでAPIキーを作成」を選択</li>
+                        <li>表示されたキー（AIza...）をコピー</li>
+                        <li>このページの入力欄に貼り付け</li>
+                    </ol>
+                </div>
+
+                <div class="modal-section warning">
+                    <strong>💳 料金について</strong>
+                    <div style="margin-top: 8px; font-size: 0.9em;">
+                        <strong style="color: #0d6d34;">✓ 無料プラン</strong>（カード不要）<br>
+                        • 1日500ページまで無料<br>
+                        • 処理速度: 遅い（1ページずつ処理）<br>
+                        <br>
+                        <strong style="color: #856404;">有料プラン</strong>（従量課金）<br>
+                        • 無制限に利用可能<br>
+                        • 処理速度: 高速（複数ページ同時処理）
+                    </div>
+                </div>
+
+                <div class="modal-section danger">
+                    <strong>⚠️ プライバシーについて</strong>
+                    <div style="margin-top: 8px;">
+                        無料プランでGoogleのモデル改善の目的上、入力したデータはGoogleに学習データとして利用される可能性があります。機密性の高い資料を扱う際はご注意ください。
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="card">
@@ -285,7 +470,36 @@
         const endPageInput = document.getElementById('endPage');
         const copyBtn = document.getElementById('copyBtn');
 
+        // モーダル制御
+        const apiKeyModal = document.getElementById('apiKeyModal');
+        const apiKeyInfoLink = document.getElementById('apiKeyInfoLink');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+
         apiKeyInput.value = localStorage.getItem('gemini_api_key') || "";
+
+        // モーダルを開く
+        apiKeyInfoLink.onclick = () => {
+            apiKeyModal.classList.add('active');
+        };
+
+        // モーダルを閉じる
+        closeModalBtn.onclick = () => {
+            apiKeyModal.classList.remove('active');
+        };
+
+        // 背景クリックでモーダルを閉じる
+        apiKeyModal.onclick = (e) => {
+            if (e.target === apiKeyModal) {
+                apiKeyModal.classList.remove('active');
+            }
+        };
+
+        // Esc キーでモーダルを閉じる
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && apiKeyModal.classList.contains('active')) {
+                apiKeyModal.classList.remove('active');
+            }
+        });
 
         document.getElementById('saveKeyBtn').onclick = () => {
             localStorage.setItem('gemini_api_key', apiKeyInput.value);
@@ -297,7 +511,7 @@
             if (type === 'error') div.className = 'log-error';
             if (type === 'retry') div.className = 'log-retry';
             if (type === 'success') div.className = 'log-success';
-            div.innerHTML = msg;
+            div.textContent = msg;
             logArea.appendChild(div);
             logArea.scrollTop = logArea.scrollHeight;
         };
