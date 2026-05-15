@@ -6,7 +6,7 @@ from typing import Optional, List
 class OCRConfig:
     """OCR実行の設定を保持するクラス"""
     api_key: str
-    model_id: str = "gemini-3.1-flash-lite-preview"
+    model_id: str = "gemini-3.1-flash-lite"
     dpi: int = 300
     start_page: int = 1
     end_page: Optional[int] = None
