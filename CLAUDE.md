@@ -84,7 +84,8 @@ Web版: index.html
 
 ## モデル設定・最適化
 
-- **デフォルトモデル**: `gemini-3.1-flash-lite-preview`（`models.py:9`）
+- **Gemini API 共通知識**（モデル一覧・thinking_level・無料枠・廃止情報）は `docs/gemini_models.md` を参照。これは `~/Code/shared/gemini_models.md` から同期された共通ドキュメント（直接編集禁止）。
+- **デフォルトモデル**: `gemini-3.1-flash-lite-preview`（`models.py:9`）⚠️ **このモデルは 2026-05-25 にシャットダウン予定**。GA 版 `gemini-3.1-flash-lite` への移行が必要。
 - **推論設定**: `thinking_level="LOW"`, `temperature=0.0`
 - **真実ソース**: `models.py` の `OCRConfig.model_id` が正本。変更後はプロセス再起動が必要
-- **モデル変更の手順**: `models.py` の `DEFAULT_MODEL` を更新し、両CLI版・Web版で動作確認
+- **モデル変更の手順**: `models.py` の `DEFAULT_MODEL` を更新し、両 CLI 版・Web 版で動作確認
