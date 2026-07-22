@@ -14,9 +14,18 @@ class OCRConfig:
     concurrency: int = 20
     rpm_limit: int = 2000
     two_column_threshold: float = 0.2
+    # 実験的機能(非推奨): 無料枠Liteプール(2モデル)へページペア単位でラウンドロビン発行し、
+    # 各モデル専用のレートリミッタで並列実行することで速度を上げる。既定はOFF(安全側)。
+    # 実地検証(2026-07-22, matsumura.pdf 5p/18ユニット)で約30%高速化(103.0s→70.2s)を確認したが、
+    # 同時に段落の重複・欠落・誤字(gemini-3.5-flash-liteの「社会理論」→「社会会理論」等)も
+    # 確認された。ペア内の2ユニットが同じ(直前ではなく1つ古い)文脈を共有するため、文の継ぎ目で
+    # 内容が重複/欠落しうる。翻訳のトーン差程度で済んだp2workflowyより、文字単位の精度が
+    # 生命線であるOCRでは実害が大きい。精度優先なら使わないこと。
+    parallel_pool: bool = False
 
     @classmethod
     def from_args(cls, args, api_key: str):
+        parallel_pool = getattr(args, "parallel_pool", False)
         if args.free:
             return cls(
                 api_key=api_key,
@@ -24,12 +33,14 @@ class OCRConfig:
                 concurrency=3,
                 rpm_limit=15,
                 start_page=args.start,
-                end_page=args.end
+                end_page=args.end,
+                parallel_pool=parallel_pool
             )
         return cls(
             api_key=api_key,
             start_page=args.start,
-            end_page=args.end
+            end_page=args.end,
+            parallel_pool=parallel_pool
         )
 
 @dataclass(frozen=True)

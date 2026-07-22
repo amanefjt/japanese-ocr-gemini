@@ -4,14 +4,14 @@
 
 - **正本の場所**: `~/Code/shared/gemini_models.md`
 - **同期**: `~/Code/shared/sync.sh` を実行すると各 repo の `docs/gemini_models.md` に上書きコピーされる
-- **最終更新**: 2026-07-10（§1 トークン上限追記・§5 価格改定を反映。Google AI for Developers の公式 changelog / models / pricing ページに基づく）
+- **最終更新**: 2026-07-22（§1 に `gemini-3.6-flash` / `gemini-3.5-flash-lite` を GA として追加、§2 推奨モデルを更新、§3 thinking_level に `MINIMAL` 追加・デフォルト値の記述を修正、§4 Rate Limit を無料枠・有料枠（Tier 2）双方の実測値に更新、§5 新モデルの価格を確定値に更新。出典: Google AI Studio ダッシュボード実測 + 公式 [latest-model](https://ai.google.dev/gemini-api/docs/latest-model?hl=ja) ページ）
 
 > [!IMPORTANT]
 > このファイルは正本（`~/Code/shared/gemini_models.md`）から sync されたコピーです。**直接編集禁止**。修正は正本側で行い、`~/Code/shared/sync.sh` を実行してください。
 
 ---
 
-## 1. 現行モデル一覧（2026-05-21 時点）
+## 1. 現行モデル一覧（2026-07-22 時点）
 
 Google AI Studio で利用可能な主要 API モデル ID。GA = Generally Available（安定版）、Preview = 廃止リスクあり。
 
@@ -19,17 +19,21 @@ Google AI Studio で利用可能な主要 API モデル ID。GA = Generally Avai
 
 | モデル ID | ステータス | 用途 | 備考 |
 |---|---|---|---|
-| `gemini-3.5-flash` | **GA**（2026-05-19 GA化） | 最新の Flash。エージェント・コーディング系で「Sustained frontier performance」を目指す新世代 | I/O 2026 で発表 |
+| `gemini-3.6-flash` | **GA**（公式ページ [latest-model](https://ai.google.dev/gemini-api/docs/latest-model?hl=ja) で確認、2026-07-22） | **`gemini-3.5-flash` の後継**。エージェント型タスク・マルチモーダルタスクの速度とインテリジェンスのバランス重視 | デフォルト `thinking_level` = `medium` |
+| `gemini-3.5-flash-lite` | **GA**（公式ページ [latest-model](https://ai.google.dev/gemini-api/docs/latest-model?hl=ja) で確認、2026-07-22） | **`gemini-3.1-flash-lite` の後継**。3.5 ファミリーで最速・最低コスト、高スループット実行向け | デフォルト `thinking_level` = `minimal`。バッチ処理・VLM-OCR の第一候補 |
+| `gemini-3.5-flash` | **GA**（2026-05-19 GA化。**`gemini-3.6-flash` の登場により旧世代化**） | 前世代 Flash。新規採用は `gemini-3.6-flash` を優先 | I/O 2026 で発表 |
 | `gemini-3.1-pro-preview` | Preview | 現行フラグシップ Pro。複雑推論・エージェント | 2M トークン context |
 | `gemini-3-flash-preview` | Preview | フロンティア性能を低コストで提供する Flash | 2026-01 から提供 |
-| `gemini-3.1-flash-lite` | **GA**（2026-05-07 GA化） | 軽量・低コスト・高 RPM。バッチ処理や VLM-OCR の主力 | 旧 `-preview` は 2026-05-25 シャットダウン |
+| `gemini-3.1-flash-lite` | **GA**（2026-05-07 GA化。**`gemini-3.5-flash-lite` の登場により旧世代化**） | 前世代 Lite。新規採用は `gemini-3.5-flash-lite` を優先 | 旧 `-preview` は 2026-05-25 シャットダウン |
 | `gemini-2.5-pro` | GA | 旧世代 Pro。レガシー互換用途 | 新規採用は非推奨 |
 | `gemini-2.5-flash` | GA | 旧世代 Flash | 新規採用は非推奨 |
 | `gemini-2.5-flash-lite` | GA | 旧世代 Lite | 新規採用は非推奨 |
 
 ### トークン上限（2026-07-10 確認）
 
-GA 2 モデルはともに **入力 1,048,576 / 出力 65,536 トークン**（出典: [gemini-3.5-flash](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash) / [gemini-3.1-flash-lite](https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite)）。長文パイプラインでも入力側が制約になることは実用上ほぼない。
+`gemini-3.5-flash` / `gemini-3.1-flash-lite` はともに **入力 1,048,576 / 出力 65,536 トークン**（出典: [gemini-3.5-flash](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash) / [gemini-3.1-flash-lite](https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite)）。長文パイプラインでも入力側が制約になることは実用上ほぼない。
+
+`gemini-3.6-flash` / `gemini-3.5-flash-lite` は公式ページ（[latest-model](https://ai.google.dev/gemini-api/docs/latest-model?hl=ja)、2026-07-22 確認）によると、ともに **約 100 万トークンのコンテキストウィンドウ、最大 64,000 トークンの出力**に対応。thinking・computer use を含む組み込みツールをフルサポート。
 
 ### 特殊用途
 
@@ -61,15 +65,16 @@ GA 2 モデルはともに **入力 1,048,576 / 出力 65,536 トークン**（�
 
 | 用途 | 推奨モデル | 理由 |
 |---|---|---|
-| 高品質テキスト生成（翻訳・要約・構造解析） | `gemini-3-flash-preview` または `gemini-3.5-flash` | フロンティア性能 vs コスト。GA 化済みの 3.5-flash が今後の本命 |
-| 大量バッチ・低コスト処理（VLM OCR・前処理） | `gemini-3.1-flash-lite` | GA。RPD・RPM が緩く、コストも 1/2 |
+| 高品質テキスト生成（翻訳・要約・構造解析） | `gemini-3.6-flash`（次点: `gemini-3.5-flash`） | `gemini-3.5-flash` の公式後継（[latest-model](https://ai.google.dev/gemini-api/docs/latest-model?hl=ja)）。Rate Limit も完全一致。今後はこちらを優先 |
+| 大量バッチ・低コスト処理（VLM OCR・前処理） | `gemini-3.5-flash-lite`（次点: `gemini-3.1-flash-lite`） | `gemini-3.1-flash-lite` の公式後継。Rate Limit は完全一致するが**価格は値上げ**（§5）。RPD・RPM は緩い |
 | 複雑推論・エージェント | `gemini-3.1-pro-preview` | 2M context、Deep Think Mini 対応 |
-| VLM（画像→テキスト） | `gemini-3.1-flash-lite` | OCR 用途で十分。Flash 系列はマルチモーダル対応 |
+| VLM（画像→テキスト） | `gemini-3.5-flash-lite` | OCR 用途で十分。Flash 系列はマルチモーダル対応 |
 
 ### 移行戦略
 
-- **新規プロジェクト**: GA モデル（`gemini-3.5-flash` / `gemini-3.1-flash-lite`）を第一候補
-- **既存プロジェクト**: `-preview` 利用箇所は changelog を月次で確認し、廃止日の 2 週間前までに GA 版へ切り替える
+- **新規プロジェクト**: `gemini-3.6-flash` / `gemini-3.5-flash-lite` を第一候補とする（公式ページで GA 確認済み、2026-07-22）
+- **既存プロジェクト（`gemini-3.5-flash` / `gemini-3.1-flash-lite` 利用中）**: 後継モデルは Rate Limit が完全一致しており切替の影響は小さいが、`gemini-3.5-flash-lite` は `gemini-3.1-flash-lite` より価格が上がっている（§5）ため、コスト試算をしてから切替えること。`gemini-3.6-flash` は出力価格が `gemini-3.5-flash` より下がっているため切替のデメリットは小さい
+- **`-preview` 利用箇所**: changelog を月次で確認し、廃止日の 2 週間前までに GA 版へ切り替える
 
 ---
 
@@ -81,15 +86,16 @@ Gemini 3 系では `thinking_budget`（数値）から `thinking_level`（列挙
 
 | 値 | 想定レスポンス時間 | 用途 |
 |---|---|---|
+| `MINIMAL` | 最速（**`gemini-3.5-flash-lite` で新規確認**、2026-07-22） | 最安・最速。定型処理向け |
 | `LOW` | 1〜3 秒 | 翻訳・分類・OCR など定型処理 |
 | `MEDIUM` | 数秒〜十数秒 | 一般的な生成タスク（**2026 年から追加**） |
 | `HIGH` | 30 秒以上もあり得る | Deep Think Mini モード。複雑推論・論文要約・構造解析 |
 
 ### 重要な仕様
 
-- **デフォルトは `HIGH`**: 明示しない場合は最高コスト・最遅レイテンシ。明示的に指定すべき。
+- **デフォルト値はモデルごとに異なる**（2026-07-22 公式ページで確認・要修正点）: `gemini-3.6-flash` のデフォルトは `MEDIUM`、`gemini-3.5-flash-lite` のデフォルトは `MINIMAL`。旧世代（`gemini-3-*`, `gemini-3.1-*`, `gemini-3.5-flash`）はデフォルト `HIGH` とされていたため、モデル移行時はデフォルト挙動が変わる点に注意。いずれのモデルでも明示的に指定するのが安全。
 - **課金**: thinking トークンは output トークンと同レートで課金される。
-- **適用モデル**: Gemini 3 系列（`gemini-3-*`, `gemini-3.1-*`, `gemini-3.5-*`）。2.5 系列は旧 API（`thinking_budget`）のまま。
+- **適用モデル**: Gemini 3 系列（`gemini-3-*`, `gemini-3.1-*`, `gemini-3.5-*`, `gemini-3.6-*`）。2.5 系列は旧 API（`thinking_budget`）のまま。
 
 ### 用途別の推奨設定
 
@@ -120,40 +126,65 @@ Google は公式ドキュメントで具体値を**一切公開していない**
 > [!NOTE]
 > **公式制限値の確認方法**: [Google AI Studio](https://aistudio.google.com/rate-limit) → プロジェクト → 「Rate Limit」タブ。プロジェクトごと・モデルごとの現在値が表示される。
 
-### 参考値（2026-05 時点・要 AI Studio 確認）
+### 実測値: 無料枠（2026-07-22, `jocr1` プロジェクト）
 
-| モデル | 無料枠 RPM | 無料枠 RPD | 無料枠 TPM |
+| モデル | RPM | RPD | TPM |
 |---|---|---|---|
-| `gemini-3.5-flash` | 〜10 | 〜250 | 〜250,000 |
-| `gemini-3-flash-preview` | 〜15 | 〜250〜500 | 〜250,000 |
 | `gemini-3.1-flash-lite` | 15 | 500 | 250,000 |
-| `gemini-3.1-pro-preview` | 〜5 | 〜100 | 〜250,000 |
+| `gemini-3.5-flash-lite` | 15 | 500 | 250,000 |
+| `gemini-2.5-flash-lite` | 10 | 20 | 250,000 |
+| `gemini-3.5-flash` | 5 | 20 | 250,000 |
+| `gemini-3.6-flash` | 5 | 20 | 250,000 |
+| `gemini-3-flash-preview` | 5 | 20 | 250,000 |
+| `gemini-2.5-flash` | 5 | 20 | 250,000 |
+| `gemini-3.1-pro-preview` | 0 | 0 | 0 |
 
-> `gemini-3.1-flash-lite` の行は 2026-07-21 に OCR プロジェクトの AI Studio ダッシュボード（[aistudio.google.com/rate-limit](https://aistudio.google.com/rate-limit)）で実測した値（RPM=15, TPM=250K, RPD=500）に更新。旧の「〜30 RPM / 〜1,000〜1,500 RPD」は非公式の推測値だったが、実測とかなり乖離していたため置き換えた。他モデルの行は依然として非公式の参考値であり、プロジェクトごとに異なりうる点に注意。
+> [!NOTE]
+> `gemini-3.1-pro-preview` は無料枠では RPM/TPM/RPD すべて 0 = **事実上利用不可**（このプロジェクトでは無料枠での Pro へのアクセス権がない模様）。
 >
-> 2025-12 の無料枠改定で Flash 系の RPD が大幅削減された。
+> 過去バージョンの「参考値（2026-05 時点）」は非公式の推測値だったため、実測値に置き換えた。2025-12 の無料枠改定で Flash 系の RPD が大幅削減された経緯は変わらず有効。
 
-### 有料枠（Tier 1 以上）
+### 実測値: 有料枠 Tier 2（2026-07-22, `Paidproject` プロジェクト）
 
-- 概ね RPM=300〜2000、TPM=1M〜数 M
-- 実質無制限に近いが、`gemini-3.1-pro-preview` のような高負荷モデルは別建てで上限あり
+| モデル | RPM | RPD | TPM |
+|---|---|---|---|
+| `gemini-2-flash-lite` | 20,000 | 無制限 | 10,000,000 |
+| `gemini-3.1-flash-lite` | 10,000 | 350,000 | 10,000,000 |
+| `gemini-3.5-flash-lite` | 10,000 | 350,000 | 10,000,000 |
+| `gemini-2.5-flash-lite` | 10,000 | 無制限 | 10,000,000 |
+| `gemini-2-flash` | 10,000 | 無制限 | 10,000,000 |
+| `gemini-embedding-1` | 5,000 | 無制限 | 5,000,000 |
+| `gemini-3.5-flash` | 2,000 | 100,000 | 3,000,000 |
+| `gemini-3.6-flash` | 2,000 | 100,000 | 3,000,000 |
+| `gemini-2.5-flash` | 2,000 | 100,000 | 3,000,000 |
+| `gemini-3.1-pro-preview` | 1,000 | 50,000 | 5,000,000 |
+| `gemini-2.5-pro` | 1,000 | 50,000 | 5,000,000 |
+
+> [!IMPORTANT]
+> `gemini-3.6-flash` は `gemini-3.5-flash` と、`gemini-3.5-flash-lite` は `gemini-3.1-flash-lite` と、**無料枠・有料枠(Tier 2) いずれも Rate Limit が完全一致**している。内部的に同じ枠（バケット）を共有しているとみられ、新旧モデル間の切替による Rate Limit 面の実質的な影響はないと考えてよい。
+>
+> Tier は Google 側の利用実績に応じて自動的に上がる制度（Tier 1 → Tier 2 → …）。上記は Tier 2 の実測値であり、Tier や課金状況によって異なる。
 
 ---
 
-## 5. 価格（2026-07-10 更新・$/1M トークン）
+## 5. 価格（2026-07-10 / 2026-07-22 更新・$/1M トークン）
 
 | モデル | 入力 | 出力 | コンテキストキャッシュ |
 |---|---|---|---|
 | `gemini-3.1-pro-preview`（200K 以下） | $2.00 | $12.00 | — |
 | `gemini-3.1-pro-preview`（200K 超） | $4.00 | $18.00 | — |
-| `gemini-3.5-flash` | **$1.50** | **$9.00** | $0.15 |
+| `gemini-3.6-flash` | **$1.50** | **$7.50** | 未公開 |
+| `gemini-3.5-flash` | $1.50 | $9.00 | $0.15 |
 | `gemini-3-flash-preview` | $0.50 | $3.00 | — |
+| `gemini-3.5-flash-lite` | **$0.30** | **$2.50** | 未公開 |
 | `gemini-3.1-flash-lite` | $0.25 | $1.50 | $0.025 |
 
-出典: [公式 Pricing](https://ai.google.dev/gemini-api/docs/pricing)（2026-07-10 確認）。キャッシュ保管は別途 $1.00/1M tok/時。
+出典: [公式 Pricing](https://ai.google.dev/gemini-api/docs/pricing)（2026-07-10 確認）、`gemini-3.6-flash` / `gemini-3.5-flash-lite` は [latest-model](https://ai.google.dev/gemini-api/docs/latest-model?hl=ja)（2026-07-22 確認）。キャッシュ保管は別途 $1.00/1M tok/時。
 
 > [!WARNING]
-> `gemini-3.5-flash` は **2026-05-19 の GA 化時に $0.50/$3.00 → $1.50/$9.00 へ 3 倍値上げ**された（Simon Willison の記事でも裏取り済み）。Preview 時代の価格を前提にしたコスト見積もりは要更新。Lite との価格差は入出力とも 6 倍。
+> `gemini-3.5-flash` は **2026-05-19 の GA 化時に $0.50/$3.00 → $1.50/$9.00 へ 3 倍値上げ**された（Simon Willison の記事でも裏取り済み）。Preview 時代の価格を前提にしたコスト見積もりは要更新。
+>
+> **`gemini-3.6-flash` は `gemini-3.5-flash` より安い**（入力同額 $1.50、出力 $9.00 → $7.50 で -17%）。一方 **`gemini-3.5-flash-lite` は `gemini-3.1-flash-lite` より高い**（入力 $0.25 → $0.30 で +20%、出力 $1.50 → $2.50 で +67%）。§4 の Rate Limit が完全一致していたため当初「価格も同額を引き継ぐ可能性が高い」と推測したが、Lite 系列については誤りだった。新世代への切替時は Rate Limit だけでなく価格も個別に確認すること。
 
 > thinking トークンも output レートで課金される点に注意。`HIGH` 多用時はコスト見積もりに含めること。
 

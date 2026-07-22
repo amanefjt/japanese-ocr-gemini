@@ -14,6 +14,12 @@ def parse_args():
     parser.add_argument("--spread", action="store_true", help="強制的に見開きモードで実行する")
     parser.add_argument("--start", type=int, default=1, help="開始ページ (1開始)")
     parser.add_argument("--end", type=int, help="終了ページ (省略時は最後まで)")
+    parser.add_argument(
+        "--parallel-pool", action="store_true",
+        help="[実験的・非推奨] 無料枠Liteプール(2モデル)へページペア単位でラウンドロビン発行し並列実行する。"
+             "約30%%高速化するが、実地検証で段落の重複・欠落や誤字（gemini-3.5-flash-liteの"
+             "「社会理論」→「社会会理論」等）を確認済み。精度が最優先の場合は使用しないこと。"
+    )
     return parser.parse_args()
 
 async def main():
