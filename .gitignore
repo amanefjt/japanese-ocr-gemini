@@ -7,3 +7,4 @@ __pycache__/
 .env
 Sample/
 .DS_Store
+tests/out/

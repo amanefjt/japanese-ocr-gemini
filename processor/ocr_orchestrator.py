@@ -40,24 +40,28 @@ class OCROrchestrator:
             else:
                 tier_manager.set_tier(GeminiTier.PAID)
 
+            rpd_limit = tier_manager.settings.rpd_limit
+            if rpd_limit:
+                print(f"  [無料枠] 1日のリクエスト上限は約{rpd_limit}回（2026-07-21 AI Studio実測）。")
+
             units = self._prepare_processing_units(
                 input_pdf, temp_dir, force_single, force_spread
             )
-            
+
             if not units:
                 print("処理対象の画像が見つかりませんでした。")
                 return
 
             # 2. OCR抽出 (Gemini API / 順次文脈引き継ぎ)
             print(f"[{datetime.now().strftime('%H:%M:%S')}] OCR処理開始: 計{len(units)}画像を文脈を維持して順次処理\n")
-            
+
             results = []
             prev_text = ""
             for i, unit in enumerate(units):
                 # 最新のティア設定に基づきセマフォを動的に取得
                 settings = tier_manager.settings
                 sem = asyncio.Semaphore(settings.concurrency)
-                
+
                 # 1つ前のユニットの末尾テキストを文脈としてセット
                 # (見開きの右ページ -> 左ページ、または前ページ -> 次ページ)
                 # ただし、前ページが存在しない場合は空文字
@@ -70,16 +74,16 @@ class OCROrchestrator:
                     prompt=unit.prompt,
                     prev_context=prev_text[-300:] if prev_text else ""
                 )
-                
+
                 res = await self.extractor.extract_text(updated_unit, sem)
                 results.append(res)
-                
+
                 # エラー時は空文字、成功時は抽出テキストを文脈にセット
                 if res.status == "OK":
                     prev_text = res.text
                 else:
                     prev_text = ""
-                
+
                 # 進捗（簡易）
                 if (i + 1) % 5 == 0 or (i + 1) == len(units):
                     print(f"  [Progress] {i + 1}/{len(units)} 画像完了...")

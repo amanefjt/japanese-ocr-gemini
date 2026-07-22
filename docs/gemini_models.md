@@ -4,7 +4,7 @@
 
 - **正本の場所**: `~/Code/shared/gemini_models.md`
 - **同期**: `~/Code/shared/sync.sh` を実行すると各 repo の `docs/gemini_models.md` に上書きコピーされる
-- **最終更新**: 2026-05-21（Google AI for Developers の公式 changelog および models ページに基づく）
+- **最終更新**: 2026-07-10（§1 トークン上限追記・§5 価格改定を反映。Google AI for Developers の公式 changelog / models / pricing ページに基づく）
 
 > [!IMPORTANT]
 > このファイルは正本（`~/Code/shared/gemini_models.md`）から sync されたコピーです。**直接編集禁止**。修正は正本側で行い、`~/Code/shared/sync.sh` を実行してください。
@@ -26,6 +26,10 @@ Google AI Studio で利用可能な主要 API モデル ID。GA = Generally Avai
 | `gemini-2.5-pro` | GA | 旧世代 Pro。レガシー互換用途 | 新規採用は非推奨 |
 | `gemini-2.5-flash` | GA | 旧世代 Flash | 新規採用は非推奨 |
 | `gemini-2.5-flash-lite` | GA | 旧世代 Lite | 新規採用は非推奨 |
+
+### トークン上限（2026-07-10 確認）
+
+GA 2 モデルはともに **入力 1,048,576 / 出力 65,536 トークン**（出典: [gemini-3.5-flash](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash) / [gemini-3.1-flash-lite](https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite)）。長文パイプラインでも入力側が制約になることは実用上ほぼない。
 
 ### 特殊用途
 
@@ -122,10 +126,12 @@ Google は公式ドキュメントで具体値を**一切公開していない**
 |---|---|---|---|
 | `gemini-3.5-flash` | 〜10 | 〜250 | 〜250,000 |
 | `gemini-3-flash-preview` | 〜15 | 〜250〜500 | 〜250,000 |
-| `gemini-3.1-flash-lite` | 〜30 | 〜1,000〜1,500 | 〜250,000〜1,000,000 |
+| `gemini-3.1-flash-lite` | 15 | 500 | 250,000 |
 | `gemini-3.1-pro-preview` | 〜5 | 〜100 | 〜250,000 |
 
-> 2025-12 の無料枠改定で Flash 系の RPD が大幅削減された。Lite は相対的に余裕がある。
+> `gemini-3.1-flash-lite` の行は 2026-07-21 に OCR プロジェクトの AI Studio ダッシュボード（[aistudio.google.com/rate-limit](https://aistudio.google.com/rate-limit)）で実測した値（RPM=15, TPM=250K, RPD=500）に更新。旧の「〜30 RPM / 〜1,000〜1,500 RPD」は非公式の推測値だったが、実測とかなり乖離していたため置き換えた。他モデルの行は依然として非公式の参考値であり、プロジェクトごとに異なりうる点に注意。
+>
+> 2025-12 の無料枠改定で Flash 系の RPD が大幅削減された。
 
 ### 有料枠（Tier 1 以上）
 
@@ -134,15 +140,20 @@ Google は公式ドキュメントで具体値を**一切公開していない**
 
 ---
 
-## 5. 価格（2026-05 時点・$/1M トークン）
+## 5. 価格（2026-07-10 更新・$/1M トークン）
 
-| モデル | 入力 | 出力 |
-|---|---|---|
-| `gemini-3.1-pro-preview`（200K 以下） | $2.00 | $12.00 |
-| `gemini-3.1-pro-preview`（200K 超） | $4.00 | $18.00 |
-| `gemini-3.5-flash` | $0.50 | $3.00 |
-| `gemini-3-flash-preview` | $0.50 | $3.00 |
-| `gemini-3.1-flash-lite` | $0.25 | $1.50 |
+| モデル | 入力 | 出力 | コンテキストキャッシュ |
+|---|---|---|---|
+| `gemini-3.1-pro-preview`（200K 以下） | $2.00 | $12.00 | — |
+| `gemini-3.1-pro-preview`（200K 超） | $4.00 | $18.00 | — |
+| `gemini-3.5-flash` | **$1.50** | **$9.00** | $0.15 |
+| `gemini-3-flash-preview` | $0.50 | $3.00 | — |
+| `gemini-3.1-flash-lite` | $0.25 | $1.50 | $0.025 |
+
+出典: [公式 Pricing](https://ai.google.dev/gemini-api/docs/pricing)（2026-07-10 確認）。キャッシュ保管は別途 $1.00/1M tok/時。
+
+> [!WARNING]
+> `gemini-3.5-flash` は **2026-05-19 の GA 化時に $0.50/$3.00 → $1.50/$9.00 へ 3 倍値上げ**された（Simon Willison の記事でも裏取り済み）。Preview 時代の価格を前提にしたコスト見積もりは要更新。Lite との価格差は入出力とも 6 倍。
 
 > thinking トークンも output レートで課金される点に注意。`HIGH` 多用時はコスト見積もりに含めること。
 

@@ -14,7 +14,7 @@ class OCRConfig:
     concurrency: int = 20
     rpm_limit: int = 2000
     two_column_threshold: float = 0.2
-    
+
     @classmethod
     def from_args(cls, args, api_key: str):
         if args.free:

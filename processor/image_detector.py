@@ -33,8 +33,17 @@ class ImageDetector:
             split_x = x_min + int(relative_idx)
 
         avg_val = col_sums.mean()
-        is_reliable = (max_val > avg_val * 1.1) and (avg_val < 250 * height)
-        
+        ratio_reliable = (max_val > avg_val * 1.1) and (avg_val < 250 * height)
+
+        # 実サンプル(morita.pdf, matsumura.pdf)で検証したところ、綺麗にスキャンされた
+        # 見開きは中央帯(40-60%)が全体的に白く、ピーク列が平均より突出しない
+        # (ratio_reliable=False)ことが多い一方、ピーク列自体はほぼ純白(255)で
+        # 綴じ目/ページ間の余白として十分信頼できるケースが大半だった。
+        # そのため、ピーク列がほぼ純白ならそれだけでも信頼できると判定する。
+        pure_white = 255 * height
+        near_pure_white = max_val >= 0.985 * pure_white
+        is_reliable = ratio_reliable or near_pure_white
+
         return split_x, is_reliable
 
     def analyze_layout_and_split(

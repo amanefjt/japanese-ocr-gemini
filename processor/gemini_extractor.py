@@ -42,9 +42,14 @@ class GeminiExtractor:
                         # プロンプトを文脈付きでフォーマット
                         formatted_prompt = unit.prompt.format(prev_context=unit.prev_context)
                         
+                        # 注: google-genai SDK (PyPI最新1.47.0時点) は thinking_level 未対応で
+                        # ThinkingConfig(thinking_level=...) が pydantic ValidationError になる。
+                        # SDKが対応するまでは thinking_budget で代替する。
+                        # budget=0（無効化）は temperature=0.0 と組み合わせると同一フレーズを
+                        # 数万文字繰り返す暴走が実測で再現したため、小さめの正の値を使う。
                         generate_config = types.GenerateContentConfig(
                             temperature=0.0,
-                            thinking_config=types.ThinkingConfig(thinking_level="LOW")
+                            thinking_config=types.ThinkingConfig(thinking_budget=512)
                         )
                         
                         stream = await self.client.aio.models.generate_content_stream(
