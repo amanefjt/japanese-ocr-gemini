@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import argparse
 from pathlib import Path
 from dotenv import load_dotenv
@@ -31,7 +32,13 @@ async def main():
         print("PDFファイルのパスを指定してください。")
         input_path_str = input("パス: ").strip() or "tobeocr.pdf"
 
-    input_path = Path(input_path_str).absolute()
+    # ドラッグ&ドロップ由来の引用符・バックスラッシュを除去し、
+    # 相対パスはシェルの呼び出し元ディレクトリ(GOCR_CALLER_CWD)基準で解決する
+    input_path_str = input_path_str.strip().strip("'\"")
+    input_path_str = re.sub(r"\\(.)", r"\1", input_path_str)
+    input_path = Path(input_path_str).expanduser()
+    if not input_path.is_absolute():
+        input_path = Path(os.getenv("GOCR_CALLER_CWD") or Path.cwd()) / input_path
     if not input_path.exists():
         print(f"エラー: ファイルが見つかりません: {input_path}")
         return
