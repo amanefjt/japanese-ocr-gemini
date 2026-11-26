@@ -657,12 +657,22 @@
 
             try {
                 const genAI = new GoogleGenerativeAI(key);
-                const model = genAI.getGenerativeModel({
-                    model: "gemini-3.1-flash-lite",
+                // 主モデルは現行 Lite（gemini-3.5-flash-lite）。503（混雑）が続いたときは
+                // 旧世代 Lite に切り替えて再試行する。両者は無料枠のカウンタが独立している
+                // （CLI 側 processor/model_rotator.py と同じ前提）。
+                const makeModel = (id) => genAI.getGenerativeModel({
+                    model: id,
                     generationConfig: {
                         thinkingConfig: { include_thoughts: false, thinking_level: 'low' }
                     }
                 });
+                const PRIMARY_MODEL_ID = "gemini-3.5-flash-lite";
+                const FALLBACK_MODEL_ID = "gemini-3.1-flash-lite";
+                const primaryModel = makeModel(PRIMARY_MODEL_ID);
+                const fallbackModel = makeModel(FALLBACK_MODEL_ID);
+                const MAX_ATTEMPTS = 5;
+                const isRateLimit = (msg) => msg.includes("429") || msg.includes("quota");
+                const isOverloaded = (msg) => msg.includes("503") || msg.includes("high demand") || msg.includes("overloaded") || msg.includes("UNAVAILABLE");
 
                 const arrayBuffer = await file.arrayBuffer();
                 const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -696,19 +706,26 @@
 
                             for (const img of images) {
                                 const prompt = (img.name === "全段") ? OCR_PROMPT_RELAXED : OCR_PROMPT_STRUCTURED;
-                                let retryCount = 0;
-                                while (retryCount < 3) {
+                                let attempt = 0;
+                                let overloadCount = 0;
+                                while (true) {
+                                    // 503 が2回続いたら旧世代 Lite に切り替える
+                                    const model = (overloadCount >= 2) ? fallbackModel : primaryModel;
                                     try {
                                         const res = await model.generateContent([{ inlineData: { data: img.base64, mimeType: "image/jpeg" } }, prompt]);
                                         combinedText += (res.response.text() || "") + "\n";
                                         break;
                                     } catch (err) {
-                                        if (err.message.includes("429") || err.message.includes("quota")) {
-                                            retryCount++;
-                                            const delay = 5000 * retryCount;
-                                            addLog(`  [!] Page ${pageNum}: 待機中 (${delay / 1000}s)...`, 'retry');
-                                            await new Promise(r => setTimeout(r, delay));
-                                        } else { throw err; }
+                                        const msg = err.message || "";
+                                        attempt++;
+                                        if (!(isRateLimit(msg) || isOverloaded(msg)) || attempt >= MAX_ATTEMPTS) throw err;
+                                        if (isOverloaded(msg)) overloadCount++;
+                                        // 5s, 10s, 20s, 40s ＋揺らぎ（並列ワーカーが同時に再送しないように）
+                                        const delay = 5000 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 2000);
+                                        const reason = isOverloaded(msg) ? "混雑(503)" : "上限(429)";
+                                        const next = (overloadCount >= 2) ? ` → 次は ${FALLBACK_MODEL_ID}` : "";
+                                        addLog(`  [!] Page ${pageNum}: ${reason}。${Math.round(delay / 1000)}s 待って再試行 (${attempt}/${MAX_ATTEMPTS - 1})${next}`, 'retry');
+                                        await new Promise(r => setTimeout(r, delay));
                                     }
                                 }
                             }
